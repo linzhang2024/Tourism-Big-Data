@@ -1,6 +1,6 @@
 import { ItineraryRequest, ItineraryResponse } from '../types';
 
-const API_BASE_URL = '/api';
+const API_BASE_URL = 'http://localhost:8000/api';
 
 export async function generateItinerary(request: ItineraryRequest): Promise<ItineraryResponse> {
   const response = await fetch(`${API_BASE_URL}/itinerary/generate`, {
