@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.itinerary import router as itinerary_router
+from app.api.trend import router as trend_router
 
 app = FastAPI(
     title="智能旅游行程规划 API",
@@ -18,6 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(itinerary_router, prefix="/api/itinerary", tags=["行程规划"])
+app.include_router(trend_router, prefix="/api/trends", tags=["旅游趋势"])
 
 
 @app.get("/")
