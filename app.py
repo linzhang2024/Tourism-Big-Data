@@ -31,53 +31,75 @@ def handle_file_upload():
     )
     
     if uploaded_file is not None:
-        # 创建新的数据加载器实例
-        data_loader = DataLoader()
-        
-        # 校验文件
-        validation_result = data_loader.validate_uploaded_file(uploaded_file)
-        
-        if validation_result['valid']:
-            try:
-                # 重置文件指针
-                uploaded_file.seek(0)
-                # 加载数据
-                data_loader.load_from_uploaded_file(uploaded_file)
-                
-                # 更新会话状态
-                st.session_state['data_source'] = 'uploaded'
-                st.session_state['uploaded_file_valid'] = True
-                st.session_state['upload_error'] = None
-                st.session_state['data_loader'] = data_loader
-                
-                st.sidebar.success(f"✅ 成功加载数据，共 {len(data_loader.get_data())} 条记录")
-                
-            except Exception as e:
-                st.session_state['uploaded_file_valid'] = False
-                st.session_state['upload_error'] = str(e)
-                st.sidebar.error(f"❌ 数据加载失败: {str(e)}")
-        else:
-            st.session_state['uploaded_file_valid'] = False
-            if 'error' in validation_result:
-                st.session_state['upload_error'] = validation_result['error']
-                st.sidebar.error(f"❌ 文件校验失败: {validation_result['error']}")
+        try:
+            # 创建新的数据加载器实例
+            data_loader = DataLoader()
+            
+            # 校验文件
+            validation_result = data_loader.validate_uploaded_file(uploaded_file)
+            
+            if validation_result['valid']:
+                try:
+                    # 重置文件指针
+                    uploaded_file.seek(0)
+                    # 加载数据
+                    data_loader.load_from_uploaded_file(uploaded_file)
+                    
+                    # 更新会话状态
+                    st.session_state['data_source'] = 'uploaded'
+                    st.session_state['uploaded_file_valid'] = True
+                    st.session_state['upload_error'] = None
+                    st.session_state['data_loader'] = data_loader
+                    
+                    st.sidebar.success(f"✅ 成功加载数据，共 {len(data_loader.get_data())} 条记录")
+                    
+                except ValueError as ve:
+                    # 处理已知的值错误
+                    st.session_state['uploaded_file_valid'] = False
+                    st.session_state['upload_error'] = str(ve)
+                    st.session_state['data_source'] = 'default'
+                    st.session_state['data_loader'] = None
+                    st.sidebar.error(f"❌ {str(ve)}")
+                except Exception as e:
+                    # 处理其他未知异常
+                    st.session_state['uploaded_file_valid'] = False
+                    st.session_state['upload_error'] = f"数据加载失败: {str(e)}"
+                    st.session_state['data_source'] = 'default'
+                    st.session_state['data_loader'] = None
+                    st.sidebar.error(f"❌ 数据加载失败: {str(e)}")
             else:
-                missing_fields = ', '.join(validation_result['missing'])
-                available_fields = ', '.join(validation_result['available'])
-                error_msg = f"缺少必要字段: {missing_fields}"
-                st.session_state['upload_error'] = error_msg
+                st.session_state['uploaded_file_valid'] = False
+                st.session_state['data_source'] = 'default'
+                st.session_state['data_loader'] = None
                 
-                # 显示详细的错误信息
-                st.sidebar.error(f"❌ {error_msg}")
-                st.sidebar.info(
-                    f"📋 必要字段: {', '.join(DataLoader.REQUIRED_FIELDS)}\n"
-                    f"📄 您的文件包含: {available_fields if available_fields else '无'}"
-                )
+                if 'error' in validation_result:
+                    st.session_state['upload_error'] = validation_result['error']
+                    st.sidebar.error(f"❌ 文件校验失败: {validation_result['error']}")
+                else:
+                    missing_fields = ', '.join(validation_result['missing'])
+                    available_fields = ', '.join(validation_result['available'])
+                    error_msg = f"缺少必要字段: {missing_fields}"
+                    st.session_state['upload_error'] = error_msg
+                    
+                    # 显示详细的错误信息
+                    st.sidebar.error(f"❌ {error_msg}")
+                    st.sidebar.info(
+                        f"📋 必要字段: {', '.join(DataLoader.REQUIRED_FIELDS)}\n"
+                        f"📄 您的文件包含: {available_fields if available_fields else '无'}"
+                    )
+        except Exception as e:
+            # 捕获所有可能的异常，确保应用不会崩溃
+            st.session_state['uploaded_file_valid'] = False
+            st.session_state['upload_error'] = f"上传处理失败: {str(e)}"
+            st.session_state['data_source'] = 'default'
+            st.session_state['data_loader'] = None
+            st.sidebar.error(f"❌ 上传处理失败: {str(e)}")
     else:
         # 如果没有上传文件，使用默认数据
         if st.session_state.get('data_source') == 'uploaded':
             st.session_state['data_source'] = 'default'
             st.session_state['data_loader'] = None
+            st.session_state['upload_error'] = None
         
         # 显示必要字段说明
         st.sidebar.info(
@@ -94,19 +116,39 @@ def handle_file_upload():
 
 def get_current_data_loader():
     """获取当前使用的数据加载器"""
-    if st.session_state['data_source'] == 'uploaded' and st.session_state.get('data_loader'):
-        return st.session_state['data_loader']
-    else:
+    try:
+        if st.session_state['data_source'] == 'uploaded' and st.session_state.get('data_loader'):
+            # 验证上传的数据加载器是否有效
+            try:
+                # 尝试获取数据，确保数据加载器正常工作
+                data = st.session_state['data_loader'].get_data()
+                if data is not None and len(data) > 0:
+                    return st.session_state['data_loader']
+                else:
+                    # 数据为空，回退到默认数据
+                    st.session_state['data_source'] = 'default'
+                    st.session_state['upload_error'] = "上传的数据为空"
+            except Exception as e:
+                # 数据加载器有问题，回退到默认数据
+                st.session_state['data_source'] = 'default'
+                st.session_state['upload_error'] = f"上传的数据无效: {str(e)}"
+        
         # 使用默认数据加载器
-        if st.session_state.get('data_loader') is None:
+        if st.session_state.get('data_loader') is None or st.session_state['data_source'] == 'default':
             try:
                 data_loader = get_data_loader()
                 data_loader.load_data()
                 st.session_state['data_loader'] = data_loader
+                return data_loader
             except Exception as e:
                 st.error(f"默认数据加载失败: {e}")
                 return None
+        
         return st.session_state['data_loader']
+    except Exception as e:
+        # 捕获所有可能的异常，确保应用不会崩溃
+        st.error(f"获取数据加载器时出错: {str(e)}")
+        return None
 
 
 def set_page_config():
