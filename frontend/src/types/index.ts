@@ -1,5 +1,11 @@
 export type InterestPreference = 'culture' | 'nature' | 'food' | 'shopping' | 'adventure' | 'relaxation';
 
+export interface TrendModel {
+  city: string;
+  keyword: string;
+  score: number;
+}
+
 export interface Activity {
   time: string;
   name: string;
