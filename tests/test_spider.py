@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import sys
 import os
 
@@ -50,11 +50,14 @@ class TestSpiderService:
     @pytest.mark.asyncio
     async def test_fetch_city_trends_normal_data(self, mocker):
         """测试正常数据抓取和清洗"""
-        mock_response = AsyncMock()
+        mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = MOCK_RAW_DATA
         
-        with patch("httpx.AsyncClient.get", return_value=mock_response):
+        async def mock_get(*args, **kwargs):
+            return mock_response
+        
+        with patch("httpx.AsyncClient.get", new=mock_get):
             trends = await spider_service.fetch_city_trends("北京")
         
         assert len(trends) == 3
@@ -76,11 +79,14 @@ class TestSpiderService:
     @pytest.mark.asyncio
     async def test_fetch_city_trends_empty_hotspots(self, mocker):
         """测试空热词数据的情况"""
-        mock_response = AsyncMock()
+        mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = MOCK_EMPTY_DATA
         
-        with patch("httpx.AsyncClient.get", return_value=mock_response):
+        async def mock_get(*args, **kwargs):
+            return mock_response
+        
+        with patch("httpx.AsyncClient.get", new=mock_get):
             trends = await spider_service.fetch_city_trends("未知城市")
         
         assert len(trends) == 0
@@ -89,11 +95,14 @@ class TestSpiderService:
     @pytest.mark.asyncio
     async def test_fetch_city_trends_invalid_data(self, mocker):
         """测试无效数据的情况"""
-        mock_response = AsyncMock()
+        mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = MOCK_INVALID_DATA
         
-        with patch("httpx.AsyncClient.get", return_value=mock_response):
+        async def mock_get(*args, **kwargs):
+            return mock_response
+        
+        with patch("httpx.AsyncClient.get", new=mock_get):
             trends = await spider_service.fetch_city_trends("测试城市")
         
         assert len(trends) == 0
