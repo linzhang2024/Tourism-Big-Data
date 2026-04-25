@@ -1,6 +1,16 @@
+import asyncio
 import httpx
 import random
+import sys
+from pathlib import Path
 from typing import List, Optional
+
+if __name__ == "__main__":
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    backend_dir = project_root / "backend"
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
+
 from app.models.trend import TrendModel
 
 
@@ -152,3 +162,46 @@ def _calculate_score(search_volume: int, mention_count: int, max_search_volume: 
     total_score = (normalized_search * search_weight) + (normalized_mention * mention_weight)
     
     return round(total_score, 2)
+
+
+if __name__ == "__main__":
+    import json
+    
+    async def main():
+        print("=" * 60)
+        print("Spider Service 独立运行测试")
+        print("=" * 60)
+        
+        test_cities = ["北京", "上海", "广州"]
+        
+        for city in test_cities:
+            print(f"\n测试城市: {city}")
+            print("-" * 40)
+            
+            try:
+                trends = await fetch_city_trends(city)
+                
+                if trends:
+                    print(f"[OK] 成功获取 {len(trends)} 个热点关键词:")
+                    
+                    for i, trend in enumerate(trends[:5], 1):
+                        print(f"  {i}. {trend.keyword} - 评分: {trend.score}")
+                    
+                    if len(trends) > 5:
+                        print(f"  ... 还有 {len(trends) - 5} 个关键词")
+                    
+                    print("\n完整数据 (JSON 格式):")
+                    print(json.dumps([t.model_dump() for t in trends], indent=2, ensure_ascii=False))
+                else:
+                    print(f"[WARN] 未获取到热点关键词")
+                    
+            except Exception as e:
+                print(f"[ERROR] 出错: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        print("\n" + "=" * 60)
+        print("测试完成!")
+        print("=" * 60)
+    
+    asyncio.run(main())
