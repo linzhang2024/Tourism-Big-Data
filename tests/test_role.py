@@ -99,3 +99,10 @@ class TestRoleAPI:
         
         assert second_response.status_code == 400
         assert "已存在" in second_response.json()["detail"]
+
+
+if __name__ == "__main__":
+    import pytest
+    import sys
+    
+    sys.exit(pytest.main([__file__, "-v", "--no-header"]))
