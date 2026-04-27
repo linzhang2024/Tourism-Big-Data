@@ -5,8 +5,11 @@ from contextlib import asynccontextmanager
 from app.api.itinerary import router as itinerary_router
 from app.api.trend import router as trend_router
 from app.api.role import router as role_router
+from app.api.permission import router as permission_router
 from app.services.role_service import role_service
+from app.services.permission_service import permission_service
 from app.models.role import RoleCreate
+from app.models.permission import PermissionCreate, PermissionCode
 
 
 def initialize_roles():
@@ -28,9 +31,39 @@ def initialize_roles():
             role_service.create_role(role)
 
 
+def initialize_permissions():
+    default_permissions = [
+        PermissionCreate(
+            name="查看数据",
+            code=PermissionCode.DATA_VIEW,
+            description="查看系统数据的权限"
+        ),
+        PermissionCreate(
+            name="导出数据",
+            code=PermissionCode.DATA_EXPORT,
+            description="导出系统数据的权限"
+        ),
+        PermissionCreate(
+            name="启动爬虫",
+            code=PermissionCode.SPIDER_RUN,
+            description="启动数据爬虫任务的权限"
+        ),
+        PermissionCreate(
+            name="系统管理",
+            code=PermissionCode.SYS_MANAGE,
+            description="系统管理相关操作的权限"
+        )
+    ]
+    
+    for permission in default_permissions:
+        if not permission_service.permission_exists_by_code(permission.code):
+            permission_service.create_permission(permission)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_roles()
+    initialize_permissions()
     yield
 
 
@@ -52,6 +85,7 @@ app.add_middleware(
 app.include_router(itinerary_router, prefix="/api/itinerary", tags=["行程规划"])
 app.include_router(trend_router, prefix="/api/trends", tags=["旅游趋势"])
 app.include_router(role_router, prefix="/api/roles", tags=["角色管理"])
+app.include_router(permission_router, prefix="/api/permissions", tags=["权限管理"])
 
 
 @app.get("/")
