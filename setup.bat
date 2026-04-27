@@ -1,326 +1,291 @@
 @echo off
-chcp 65001 >nul
-setlocal enabledelayedexpansion
+REM ========================================
+REM Tourism Big Data Platform Setup Script
+REM ========================================
 
+SETLOCAL ENABLEDELAYEDEXPANSION
+
+REM Set project root directory (where this script is located)
+SET "PROJECT_ROOT=%~dp0"
+SET "BACKEND_DIR=%PROJECT_ROOT%backend"
+SET "FRONTEND_DIR=%PROJECT_ROOT%frontend"
+
+echo.
 echo ========================================
-echo   旅游趋势分析平台 - 一键安装脚本
+echo   Tourism Big Data Platform Setup
 echo ========================================
 echo.
 
-REM 设置项目根目录
-set PROJECT_ROOT=%~dp0
-set BACKEND_DIR=%PROJECT_ROOT%backend
-set FRONTEND_DIR=%PROJECT_ROOT%frontend
-
-echo [1/4] 检查系统环境...
+REM ========================================
+REM Step 1: Check System Requirements
+REM ========================================
+echo [1/4] Checking system requirements...
 echo.
 
-REM 检查 Python
-echo 检查 Python 环境...
+REM Check Python
+echo Checking Python...
 python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [错误] 未找到 Python，请先安装 Python 3.8+
-    echo 下载地址: https://www.python.org/downloads/
-    exit /b 1
+IF %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Python not found. Please install Python 3.8+
+    echo Download: https://www.python.org/downloads/
+    EXIT /B 1
 )
 
-for /f "tokens=2" %%i in ('python --version 2^>^&1') do (
-    set PYTHON_VERSION=%%i
+FOR /F "tokens=2" %%i IN ('python --version 2^>^&1') DO (
+    SET "PYTHON_VERSION=%%i"
 )
-echo [OK] Python 版本: %PYTHON_VERSION%
+echo [OK] Python version: %PYTHON_VERSION%
 
-REM 检查 Node.js
+REM Check Node.js
 echo.
-echo 检查 Node.js 环境...
+echo Checking Node.js...
 node --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [错误] 未找到 Node.js，请先安装 Node.js 16+
-    echo 下载地址: https://nodejs.org/
-    exit /b 1
+IF %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Node.js not found. Please install Node.js 16+
+    echo Download: https://nodejs.org/
+    EXIT /B 1
 )
 
-for /f "tokens=*" %%i in ('node --version 2^>^&1') do (
-    set NODE_VERSION=%%i
+FOR /F "tokens=*" %%i IN ('node --version 2^>^&1') DO (
+    SET "NODE_VERSION=%%i"
 )
-echo [OK] Node.js 版本: %NODE_VERSION%
+echo [OK] Node.js version: %NODE_VERSION%
 
-REM 检查 npm
+REM Check npm
 echo.
-echo 检查 npm 环境...
+echo Checking npm...
 npm --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [错误] 未找到 npm，可能是 Node.js 安装不完整
-    exit /b 1
+IF %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] npm not found. Please check your Node.js installation.
+    EXIT /B 1
 )
 
-for /f "tokens=*" %%i in ('npm --version 2^>^&1') do (
-    set NPM_VERSION=%%i
+FOR /F "tokens=*" %%i IN ('npm --version 2^>^&1') DO (
+    SET "NPM_VERSION=%%i"
 )
-echo [OK] npm 版本: %NPM_VERSION%
+echo [OK] npm version: %NPM_VERSION%
 
+REM ========================================
+REM Step 2: Install Backend Dependencies
+REM ========================================
 echo.
-echo [2/4] 安装后端 Python 依赖...
+echo [2/4] Installing backend dependencies...
 echo.
 
-REM 检查后端目录
-if not exist "%BACKEND_DIR%" (
-    echo [错误] 后端目录不存在: %BACKEND_DIR%
-    exit /b 1
+REM Check if backend directory exists
+IF NOT EXIST "%BACKEND_DIR%" (
+    echo [ERROR] Backend directory not found: %BACKEND_DIR%
+    EXIT /B 1
 )
 
-echo 进入后端目录: %BACKEND_DIR%
-cd /d "%BACKEND_DIR%"
+echo Backend directory: %BACKEND_DIR%
 
-REM 检查依赖文件
-if not exist "requirements-backend.txt" (
-    echo [警告] 未找到 requirements-backend.txt，尝试查找其他依赖文件...
-    if exist "requirements.txt" (
-        echo [OK] 找到 requirements.txt
-        set REQ_FILE=requirements.txt
-    ) else (
-        echo [错误] 未找到任何依赖文件
-        exit /b 1
+REM Check requirements file
+SET "REQ_FILE=%BACKEND_DIR%\requirements-backend.txt"
+IF NOT EXIST "%REQ_FILE%" (
+    echo [WARNING] requirements-backend.txt not found, trying requirements.txt
+    SET "REQ_FILE=%BACKEND_DIR%\requirements.txt"
+    IF NOT EXIST "%REQ_FILE%" (
+        echo [ERROR] No requirements file found in backend directory
+        EXIT /B 1
     )
-) else (
-    set REQ_FILE=requirements-backend.txt
 )
 
-echo 安装依赖文件: %REQ_FILE%
-echo.
+echo Requirements file: %REQ_FILE%
 
-REM 升级 pip
-echo 升级 pip...
-python -m pip install --upgrade pip >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [警告] pip 升级失败，继续安装依赖...
-) else (
-    echo [OK] pip 已升级
+REM Upgrade pip first
+echo.
+echo Upgrading pip...
+python -m pip install --upgrade pip
+IF %ERRORLEVEL% NEQ 0 (
+    echo [WARNING] pip upgrade failed, continuing anyway...
+) ELSE (
+    echo [OK] pip upgraded successfully
 )
 
+REM Install backend dependencies
 echo.
-echo 安装后端依赖...
+echo Installing backend dependencies (this may take a few minutes)...
 pip install -r "%REQ_FILE%"
-if %errorlevel% neq 0 (
+IF %ERRORLEVEL% NEQ 0 (
     echo.
-    echo [错误] 后端依赖安装失败
-    echo 请检查网络连接或尝试手动安装: pip install -r %REQ_FILE%
-    exit /b 1
+    echo [ERROR] Backend dependencies installation failed
+    echo Please check your network connection and try again
+    echo Or run: pip install -r "%REQ_FILE%"
+    EXIT /B 1
 )
 
-echo.
-echo [OK] 后端依赖安装完成
+echo [OK] Backend dependencies installed successfully
 
-REM 检查根目录的 requirements.txt
-if exist "%PROJECT_ROOT%requirements.txt" (
+REM Install root requirements if exists
+SET "ROOT_REQ=%PROJECT_ROOT%requirements.txt"
+IF EXIST "%ROOT_REQ%" (
     echo.
-    echo 检查根目录依赖...
-    cd /d "%PROJECT_ROOT%"
-    pip install -r requirements.txt >nul 2>&1
-    if %errorlevel% neq 0 (
-        echo [警告] 根目录依赖安装失败，但不影响核心功能
-    ) else (
-        echo [OK] 根目录依赖安装完成
+    echo Installing root requirements...
+    pip install -r "%ROOT_REQ%"
+    IF %ERRORLEVEL% NEQ 0 (
+        echo [WARNING] Root requirements installation failed, but core features should work
+    ) ELSE (
+        echo [OK] Root requirements installed
     )
 )
 
+REM ========================================
+REM Step 3: Install Frontend Dependencies
+REM ========================================
 echo.
-echo [3/4] 安装前端 npm 依赖...
+echo [3/4] Installing frontend dependencies...
 echo.
 
-REM 检查前端目录
-if not exist "%FRONTEND_DIR%" (
-    echo [错误] 前端目录不存在: %FRONTEND_DIR%
-    exit /b 1
+REM Check if frontend directory exists
+IF NOT EXIST "%FRONTEND_DIR%" (
+    echo [ERROR] Frontend directory not found: %FRONTEND_DIR%
+    EXIT /B 1
 )
 
-echo 进入前端目录: %FRONTEND_DIR%
+echo Frontend directory: %FRONTEND_DIR%
+
+REM Check package.json
+IF NOT EXIST "%FRONTEND_DIR%\package.json" (
+    echo [ERROR] package.json not found in frontend directory
+    EXIT /B 1
+)
+
+echo Installing frontend dependencies (this may take a few minutes)...
 cd /d "%FRONTEND_DIR%"
-
-REM 检查 package.json
-if not exist "package.json" (
-    echo [错误] 未找到 package.json
-    exit /b 1
-)
-
-echo 检查 package.json 配置...
-echo.
-
-REM 安装依赖
-echo 安装前端依赖（这可能需要几分钟时间）...
-echo.
 
 npm install
-if %errorlevel% neq 0 (
+IF %ERRORLEVEL% NEQ 0 (
     echo.
-    echo [错误] 前端依赖安装失败
-    echo 请检查:
-    echo   1. 网络连接是否正常
-    echo   2. 尝试使用淘宝镜像: npm config set registry https://registry.npmmirror.com
-    echo   3. 然后重新运行: npm install
-    exit /b 1
+    echo [ERROR] Frontend dependencies installation failed
+    echo Please check:
+    echo   1. Your network connection
+    echo   2. Try using China mirror: npm config set registry https://registry.npmmirror.com
+    echo   3. Then run: npm install
+    EXIT /B 1
 )
 
-echo.
-echo [OK] 前端依赖安装完成
+echo [OK] Frontend dependencies installed successfully
 
+REM ========================================
+REM Step 4: Verify Installation
+REM ========================================
 echo.
-echo [4/4] 验证安装结果...
+echo [4/4] Verifying installation...
 echo.
 
-REM 验证后端依赖
-echo 验证后端依赖...
-cd /d "%BACKEND_DIR%"
+REM Verify backend
+echo Verifying backend dependencies...
 
-REM 检查关键依赖
-python -c "import fastapi; print(f'FastAPI: {fastapi.__version__}')" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [警告] FastAPI 导入失败
-    set BACKEND_OK=0
-) else (
-    for /f "tokens=*" %%i in ('python -c "import fastapi; print(fastapi.__version__)" 2^>^&1') do (
-        echo [OK] FastAPI 版本: %%i
+REM Check FastAPI
+python -c "import fastapi; print(fastapi.__version__)" >nul 2>&1
+IF %ERRORLEVEL% NEQ 0 (
+    echo [WARNING] FastAPI import failed
+) ELSE (
+    FOR /F "tokens=*" %%i IN ('python -c "import fastapi; print(fastapi.__version__)" 2^>^&1') DO (
+        echo [OK] FastAPI version: %%i
     )
-    set BACKEND_OK=1
 )
 
+REM Check Uvicorn
 python -c "import uvicorn; print(uvicorn.__version__)" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [警告] Uvicorn 导入失败
-    set BACKEND_OK=0
-) else (
-    for /f "tokens=*" %%i in ('python -c "import uvicorn; print(uvicorn.__version__)" 2^>^&1') do (
-        echo [OK] Uvicorn 版本: %%i
+IF %ERRORLEVEL% NEQ 0 (
+    echo [WARNING] Uvicorn import failed
+) ELSE (
+    FOR /F "tokens=*" %%i IN ('python -c "import uvicorn; print(uvicorn.__version__)" 2^>^&1') DO (
+        echo [OK] Uvicorn version: %%i
     )
 )
 
+REM Check httpx
 python -c "import httpx; print(httpx.__version__)" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [警告] httpx 导入失败
-    set BACKEND_OK=0
-) else (
-    for /f "tokens=*" %%i in ('python -c "import httpx; print(httpx.__version__)" 2^>^&1') do (
-        echo [OK] httpx 版本: %%i
+IF %ERRORLEVEL% NEQ 0 (
+    echo [WARNING] httpx import failed
+) ELSE (
+    FOR /F "tokens=*" %%i IN ('python -c "import httpx; print(httpx.__version__)" 2^>^&1') DO (
+        echo [OK] httpx version: %%i
     )
 )
 
-REM 验证前端依赖
+REM Verify frontend
 echo.
-echo 验证前端依赖...
-cd /d "%FRONTEND_DIR%"
+echo Verifying frontend dependencies...
 
-if exist "node_modules" (
-    echo [OK] node_modules 目录存在
+IF EXIST "%FRONTEND_DIR%\node_modules" (
+    echo [OK] node_modules directory exists
     
-    REM 检查关键依赖
-    if exist "node_modules\react" (
-        for /f "tokens=2 delims==^"" %%i in ('findstr /C:"version" node_modules\react\package.json 2^>^&1') do (
-            echo [OK] React 已安装
-        )
+    REM Check React
+    IF EXIST "%FRONTEND_DIR%\node_modules\react" (
+        echo [OK] React is installed
     )
     
-    if exist "node_modules\typescript" (
-        echo [OK] TypeScript 已安装
+    REM Check TypeScript
+    IF EXIST "%FRONTEND_DIR%\node_modules\typescript" (
+        echo [OK] TypeScript is installed
     )
     
-    if exist "node_modules\vite" (
-        echo [OK] Vite 已安装
+    REM Check Vite
+    IF EXIST "%FRONTEND_DIR%\node_modules\vite" (
+        echo [OK] Vite is installed
     )
-    
-    set FRONTEND_OK=1
-) else (
-    echo [警告] node_modules 目录不存在
-    set FRONTEND_OK=0
+) ELSE (
+    echo [WARNING] node_modules directory not found
 )
 
+REM ========================================
+REM Summary
+REM ========================================
 echo.
 echo ========================================
-echo   安装完成总结
+echo   Installation Complete!
 echo ========================================
 echo.
-
-if "%BACKEND_OK%"=="1" (
-    echo [√] 后端依赖安装成功
-) else (
-    echo [×] 后端依赖安装可能存在问题
-)
-
-if "%FRONTEND_OK%"=="1" (
-    echo [√] 前端依赖安装成功
-) else (
-    echo [×] 前端依赖安装可能存在问题
-)
-
+echo Next steps:
 echo.
-echo ========================================
-echo   下一步操作指南
-echo ========================================
-echo.
-echo 1. 启动后端服务:
+echo 1. Start backend service:
 echo    cd /d "%BACKEND_DIR%"
 echo    python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 echo.
-echo 2. 启动前端服务:
+echo 2. Start frontend service (new terminal):
 echo    cd /d "%FRONTEND_DIR%"
 echo    npm run dev
 echo.
-echo 3. 运行健康检查:
+echo 3. Run health check:
 echo    cd /d "%FRONTEND_DIR%"
 echo    npm run health
-echo    或
+echo    OR
 echo    python "%PROJECT_ROOT%scripts\health_check.py"
 echo.
-echo 4. 访问应用:
-echo    前端: http://127.0.0.1:3000
-echo    后端 API 文档: http://127.0.0.1:8000/docs
+echo 4. Access the application:
+echo    Frontend: http://127.0.0.1:3000
+echo    Backend API docs: http://127.0.0.1:8000/docs
 echo.
-echo ========================================
-echo   安装脚本执行完毕
 echo ========================================
 echo.
 
-REM 询问是否启动服务
-echo 是否现在启动服务?
-echo [1] 启动后端服务
-echo [2] 启动前端服务
-echo [3] 同时启动前后端服务
-echo [4] 不启动，退出
-echo.
-set /p START_CHOICE="请选择 (1-4): "
+REM Ask user if they want to start services now
+SET /P START_SERVICES="Start services now? (y/n): "
 
-if "%START_CHOICE%"=="1" (
+IF /I "%START_SERVICES%"=="y" (
     echo.
-    echo 启动后端服务...
+    echo Starting backend service...
     cd /d "%BACKEND_DIR%"
-    start cmd /k "title 后端服务 - FastAPI && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload"
-    echo [OK] 后端服务已在新窗口启动
-    echo 访问: http://127.0.0.1:8000/docs
-) else if "%START_CHOICE%"=="2" (
+    start cmd /k "title Backend - FastAPI && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload"
+    echo [OK] Backend service started in new window
     echo.
-    echo 启动前端服务...
-    cd /d "%FRONTEND_DIR%"
-    start cmd /k "title 前端服务 - React + Vite && npm run dev"
-    echo [OK] 前端服务已在新窗口启动
-    echo 访问: http://127.0.0.1:3000
-) else if "%START_CHOICE%"=="3" (
-    echo.
-    echo 启动后端服务...
-    cd /d "%BACKEND_DIR%"
-    start cmd /k "title 后端服务 - FastAPI && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload"
-    echo [OK] 后端服务已在新窗口启动
     
-    echo.
-    echo 启动前端服务...
+    echo Starting frontend service...
     cd /d "%FRONTEND_DIR%"
-    start cmd /k "title 前端服务 - React + Vite && npm run dev"
-    echo [OK] 前端服务已在新窗口启动
+    start cmd /k "title Frontend - React + Vite && npm run dev"
+    echo [OK] Frontend service started in new window
+    echo.
     
+    echo Both services are starting...
+    echo Frontend: http://127.0.0.1:3000
+    echo Backend API: http://127.0.0.1:8000/docs
+) ELSE (
     echo.
-    echo 两个服务已在独立窗口启动
-    echo 前端: http://127.0.0.1:3000
-    echo 后端 API: http://127.0.0.1:8000/docs
-) else (
-    echo.
-    echo 已选择不启动服务，安装脚本退出。
+    echo Installation complete. You can start services manually using the commands above.
 )
 
 echo.

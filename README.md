@@ -145,15 +145,31 @@ yarn install
 
 ### 启动后端服务
 
+**重要提示**：必须从 `backend/` 目录运行后端服务。根目录有一个 `app.py`（Streamlit 应用），如果从根目录运行会导致模块名冲突。
+
 ```bash
-# 进入后端目录
+# 方式一（推荐）：先进入后端目录，再启动服务
 cd backend
 
-# 启动 FastAPI 服务（开发模式）
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-
-# 或使用 Python 模块方式
+# 启动 FastAPI 服务（开发模式，支持热重载）
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+
+# 或者使用 uvicorn 命令（如果已添加到 PATH）
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+```bash
+# 方式二：从项目根目录运行（使用 --app-dir 参数）
+# 注意：这种方式需要确保路径正确
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --app-dir backend
+```
+
+**错误示例（请勿使用）**：
+```bash
+# ❌ 错误：从根目录运行会导致模块冲突
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+# 错误信息：Could not import module 'app.main'
+# 原因：根目录的 app.py（Streamlit）与 backend/app/ 目录同名，导致导入错误
 ```
 
 服务启动后，访问以下地址：
