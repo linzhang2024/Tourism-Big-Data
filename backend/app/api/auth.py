@@ -69,7 +69,7 @@ def require_permissions(required_permissions: List[str]):
     ) -> UserResponse:
         user_permissions = current_user.permissions
         logger.info(f"[权限校验] 用户 '{current_user.username}' 权限: {user_permissions}")
-        logger.info(f"[权限校验] 需要权限: {required_permissions}")
+        logger.info(f"[权限校验] 需要所有权限: {required_permissions}")
         
         for permission in required_permissions:
             if permission not in user_permissions:
@@ -78,6 +78,33 @@ def require_permissions(required_permissions: List[str]):
                     status_code=403,
                     detail=f"缺少权限: {permission}"
                 )
+        
+        logger.info(f"[权限校验] 用户 '{current_user.username}' 权限验证通过")
+        return current_user
+    
+    return permission_checker
+
+
+def require_any_permission(required_permissions: List[str]):
+    def permission_checker(
+        current_user: UserResponse = Depends(get_current_user_dependency)
+    ) -> UserResponse:
+        user_permissions = current_user.permissions
+        logger.info(f"[权限校验] 用户 '{current_user.username}' 权限: {user_permissions}")
+        logger.info(f"[权限校验] 需要任一权限: {required_permissions}")
+        
+        has_any = False
+        for permission in required_permissions:
+            if permission in user_permissions:
+                has_any = True
+                break
+        
+        if not has_any:
+            logger.warning(f"[权限校验] 用户 '{current_user.username}' 缺少任一所需权限: {required_permissions}")
+            raise HTTPException(
+                status_code=403,
+                detail=f"缺少权限，需要: {required_permissions} 中的任一权限"
+            )
         
         logger.info(f"[权限校验] 用户 '{current_user.username}' 权限验证通过")
         return current_user

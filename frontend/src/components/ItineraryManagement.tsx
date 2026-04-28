@@ -48,10 +48,11 @@ const initialFormData: ItineraryFormData = {
 interface ItineraryManagementProps {}
 
 export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, hasAnyPermission } = useAuth();
   const [itineraries, setItineraries] = useState<ItineraryDetail[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasAccessError, setHasAccessError] = useState(false);
   
   const [showFormModal, setShowFormModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -67,27 +68,50 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
   const [generatedPlans, setGeneratedPlans] = useState<DayPlan[] | null>(null);
   const [generatedEstimatedCost, setGeneratedEstimatedCost] = useState<number | null>(null);
 
+  const canView = hasAnyPermission(['itinerary:view', 'data:view']);
+  const canViewDetail = hasPermission('itinerary:view');
+  const canCreate = hasPermission('itinerary:create');
+  const canUpdate = hasPermission('itinerary:update');
+  const canDelete = hasPermission('itinerary:delete');
+
   const fetchItineraries = useCallback(async () => {
+    if (!canView) {
+      console.log('[行程管理] 用户没有查看权限，跳过数据获取');
+      return;
+    }
+    
     setLoading(true);
     setError(null);
+    setHasAccessError(false);
+    
     try {
       console.log('[行程管理] 开始获取行程列表...');
       const data = await getItineraries();
       console.log('[行程管理] 获取行程列表成功:', data.length, '条');
       setItineraries(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('[行程管理] 获取行程列表失败:', err);
-      setError(err instanceof Error ? err.message : '获取行程列表失败');
+      
+      if (err.response?.status === 403) {
+        setHasAccessError(true);
+        setError('您没有权限查看行程数据');
+      } else {
+        setError(err instanceof Error ? err.message : '获取行程列表失败');
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canView]);
 
   useEffect(() => {
     fetchItineraries();
   }, [fetchItineraries]);
 
   const openCreateModal = () => {
+    if (!canCreate) {
+      console.log('[行程管理] 用户没有创建权限');
+      return;
+    }
     setEditingItinerary(null);
     setFormData(initialFormData);
     setGeneratedPlans(null);
@@ -96,6 +120,10 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
   };
 
   const openEditModal = (itinerary: ItineraryDetail) => {
+    if (!canUpdate) {
+      console.log('[行程管理] 用户没有编辑权限');
+      return;
+    }
     setEditingItinerary(itinerary);
     setFormData({
       title: itinerary.title,
@@ -112,11 +140,19 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
   };
 
   const openDeleteModal = (itinerary: ItineraryDetail) => {
+    if (!canDelete) {
+      console.log('[行程管理] 用户没有删除权限');
+      return;
+    }
     setDeletingItinerary(itinerary);
     setShowDeleteModal(true);
   };
 
   const openDetailModal = (itinerary: ItineraryDetail) => {
+    if (!canViewDetail && !canView) {
+      console.log('[行程管理] 用户没有查看详情权限');
+      return;
+    }
     setViewingItinerary(itinerary);
     setShowDetailModal(true);
   };
@@ -235,10 +271,55 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
     return new Date(dateString).toLocaleString('zh-CN');
   };
 
-  const canView = hasPermission('itinerary:view');
-  const canCreate = hasPermission('itinerary:create');
-  const canUpdate = hasPermission('itinerary:update');
-  const canDelete = hasPermission('itinerary:delete');
+  if (!canView && !hasAccessError) {
+    return (
+      <div className="itinerary-management">
+        <div className="form-card" style={{ textAlign: 'center', padding: '3rem' }}>
+          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🔒</div>
+          <h3 style={{ color: '#6b7280', marginBottom: '1rem' }}>暂无权限查看</h3>
+          <p style={{ color: '#9ca3af', marginBottom: '0.5rem' }}>
+            您的账号没有行程查看权限
+          </p>
+          <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+            如需查看，请联系管理员开通 itinerary:view 或 data:view 权限
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (hasAccessError) {
+    return (
+      <div className="itinerary-management">
+        <div className="form-card" style={{ textAlign: 'center', padding: '3rem' }}>
+          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🚫</div>
+          <h3 style={{ color: '#dc2626', marginBottom: '1rem' }}>访问被拒绝</h3>
+          <p style={{ color: '#6b7280', marginBottom: '0.5rem' }}>
+            服务器拒绝了您的访问请求
+          </p>
+          <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+            请确认您的账号是否拥有相应的访问权限
+          </p>
+          <button
+            onClick={fetchItineraries}
+            style={{
+              marginTop: '1.5rem',
+              padding: '0.75rem 1.5rem',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '1rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            🔄 重试
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="itinerary-management">
@@ -252,7 +333,7 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
           )}
         </div>
 
-        {error && (
+        {error && !hasAccessError && (
           <div className="error-message">{error}</div>
         )}
 
@@ -265,6 +346,11 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
               <button className="add-btn" onClick={openCreateModal} style={{ marginTop: '1rem' }}>
                 创建第一个行程
               </button>
+            )}
+            {!canCreate && (
+              <p style={{ color: '#9ca3af', marginTop: '0.5rem', fontSize: '0.875rem' }}>
+                您没有创建行程的权限，仅可查看现有数据
+              </p>
             )}
           </div>
         ) : (
@@ -300,7 +386,7 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
                     <td className="date-cell">{formatDate(itinerary.created_at)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        {canView && (
+                        {(canViewDetail || canView) && (
                           <button
                             className="permission-btn"
                             onClick={() => openDetailModal(itinerary)}
@@ -309,7 +395,7 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
                             👁️ 查看
                           </button>
                         )}
-                        {canUpdate && (
+                        {canUpdate ? (
                           <button
                             className="permission-btn"
                             onClick={() => openEditModal(itinerary)}
@@ -317,13 +403,39 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
                           >
                             ✏️ 编辑
                           </button>
+                        ) : (
+                          <button
+                            className="permission-btn"
+                            disabled
+                            title="您没有编辑权限"
+                            style={{ 
+                              opacity: 0.5, 
+                              cursor: 'not-allowed',
+                              background: '#9ca3af'
+                            }}
+                          >
+                            ✏️ 编辑
+                          </button>
                         )}
-                        {canDelete && (
+                        {canDelete ? (
                           <button
                             className="permission-btn"
                             onClick={() => openDeleteModal(itinerary)}
                             title="删除"
                             style={{ background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' }}
+                          >
+                            🗑️ 删除
+                          </button>
+                        ) : (
+                          <button
+                            className="permission-btn"
+                            disabled
+                            title="您没有删除权限"
+                            style={{ 
+                              opacity: 0.5, 
+                              cursor: 'not-allowed',
+                              background: '#9ca3af'
+                            }}
                           >
                             🗑️ 删除
                           </button>
@@ -334,6 +446,19 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!canCreate && itineraries.length > 0 && (
+          <div style={{ 
+            marginTop: '1rem', 
+            padding: '0.75rem 1rem', 
+            background: '#fef3c7', 
+            borderRadius: '8px',
+            fontSize: '0.875rem',
+            color: '#92400e'
+          }}>
+            ⚠️ 提示：您只有查看权限，无法进行新增、编辑或删除操作
           </div>
         )}
       </div>

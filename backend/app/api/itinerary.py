@@ -11,7 +11,7 @@ from app.models.itinerary import (
 )
 from app.models.user import UserResponse
 from app.services.itinerary_service import generate_mock_itinerary, itinerary_service
-from app.api.auth import require_permissions
+from app.api.auth import require_permissions, require_any_permission
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,7 +28,7 @@ async def generate_itinerary(
 
 @router.get("/", response_model=List[ItineraryDetail])
 async def get_all_itineraries(
-    current_user: UserResponse = Depends(require_permissions(["itinerary:view"]))
+    current_user: UserResponse = Depends(require_any_permission(["itinerary:view", "data:view"]))
 ):
     logger.info(f"[行程API] 用户 '{current_user.username}' 获取所有行程列表")
     return itinerary_service.get_all_itineraries()
@@ -36,7 +36,7 @@ async def get_all_itineraries(
 
 @router.get("/my", response_model=List[ItineraryDetail])
 async def get_my_itineraries(
-    current_user: UserResponse = Depends(require_permissions(["itinerary:view"]))
+    current_user: UserResponse = Depends(require_any_permission(["itinerary:view", "data:view"]))
 ):
     logger.info(f"[行程API] 用户 '{current_user.username}' 获取自己的行程列表")
     return itinerary_service.get_itineraries_by_user(current_user.id)
@@ -45,7 +45,7 @@ async def get_my_itineraries(
 @router.get("/{itinerary_id}", response_model=ItineraryDetail)
 async def get_itinerary(
     itinerary_id: int,
-    current_user: UserResponse = Depends(require_permissions(["itinerary:view"]))
+    current_user: UserResponse = Depends(require_any_permission(["itinerary:view", "data:view"]))
 ):
     logger.info(f"[行程API] 用户 '{current_user.username}' 获取行程详情: ID={itinerary_id}")
     itinerary = itinerary_service.get_itinerary_by_id(itinerary_id)
