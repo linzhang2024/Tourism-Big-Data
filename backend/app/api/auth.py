@@ -5,12 +5,20 @@ from typing import Optional
 
 from app.models.user import LoginRequest, LoginResponse, UserResponse
 from app.services.user_service import user_service
+from app.services.role_service import role_service
 from app.utils.jwt_utils import jwt_utils
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 security = HTTPBearer(auto_error=False)
+
+
+def get_user_permissions(role_code: str) -> list:
+    role = role_service.get_role_by_code(role_code)
+    if role:
+        return [p.code for p in role.permissions]
+    return []
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -28,17 +36,30 @@ async def login(login_request: LoginRequest):
     
     logger.info(f"[认证 API] 登录成功: 用户 '{user.username}'，角色 '{user.role_code}'")
     
+    permissions = get_user_permissions(user.role_code)
+    logger.info(f"[认证 API] 用户 '{user.username}' 的权限: {permissions}")
+    
     access_token = jwt_utils.create_access_token(user)
     
     logger.info(f"[认证 API] 生成 JWT Token 成功，长度: {len(access_token)} 字符")
     
+    user_with_permissions = UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        role_code=user.role_code,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+        permissions=permissions
+    )
+    
     response = LoginResponse(
         access_token=access_token,
         token_type="bearer",
-        user=user
+        user=user_with_permissions
     )
     
-    logger.info(f"[认证 API] 返回登录响应: 用户ID={user.id}, 用户名={user.username}, 角色={user.role_code}")
+    logger.info(f"[认证 API] 返回登录响应: 用户ID={user.id}, 用户名={user.username}, 角色={user.role_code}, 权限={permissions}")
     
     return response
 
@@ -73,7 +94,8 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
             detail="用户不存在"
         )
     
-    logger.info(f"[认证 API] Token 验证成功: 用户 '{user.username}'，角色 '{user.role_code}'")
+    permissions = get_user_permissions(user.role_code)
+    logger.info(f"[认证 API] Token 验证成功: 用户 '{user.username}'，角色 '{user.role_code}'，权限: {permissions}")
     
     return UserResponse(
         id=user.id,
@@ -81,5 +103,6 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
         email=user.email,
         role_code=user.role_code,
         created_at=user.created_at,
-        updated_at=user.updated_at
+        updated_at=user.updated_at,
+        permissions=permissions
     )

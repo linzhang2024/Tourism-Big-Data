@@ -4,6 +4,7 @@ import { ItineraryForm } from './components/ItineraryForm';
 import { ItineraryResult } from './components/ItineraryResult';
 import { RoleManagement } from './components/RoleManagement';
 import { PermissionManagement } from './components/PermissionManagement';
+import Dashboard from './components/Dashboard';
 import LoginPage from './components/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './contexts/AuthContext';
@@ -11,10 +12,10 @@ import { ItineraryRequest, ItineraryResponse } from './types';
 import { generateItinerary } from './api';
 import './App.css';
 
-type TabType = 'itinerary' | 'roles' | 'permissions';
+type TabType = 'dashboard' | 'itinerary' | 'roles' | 'permissions';
 
 const MainApp: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('roles');
+  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [itinerary, setItinerary] = useState<ItineraryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +107,12 @@ const MainApp: React.FC = () => {
         
         <nav className="nav-tabs">
           <button
+            className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setActiveTab('dashboard')}
+          >
+            📊 数据面板
+          </button>
+          <button
             className={`nav-tab ${activeTab === 'itinerary' ? 'active' : ''}`}
             onClick={() => setActiveTab('itinerary')}
           >
@@ -128,7 +135,9 @@ const MainApp: React.FC = () => {
       
       <main className="app-main">
         <div className="container">
-          {activeTab === 'itinerary' ? (
+          {activeTab === 'dashboard' ? (
+            <Dashboard />
+          ) : activeTab === 'itinerary' ? (
             <>
               <ItineraryForm onSubmit={handleSubmit} loading={loading} />
               
