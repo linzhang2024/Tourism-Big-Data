@@ -51,5 +51,18 @@ class RoleService:
                 count += 1
         return count
 
+    def set_role_permissions(self, role_code: str, permissions: List[PermissionResponse]) -> bool:
+        role = self.get_role_by_code(role_code)
+        if role is None:
+            return False
+        role.permissions = permissions.copy()
+        return True
+
+    def get_role_by_id(self, role_id: int) -> Optional[RoleResponse]:
+        for role in self.roles:
+            if role.id == role_id:
+                return role
+        return None
+
 
 role_service = RoleService()

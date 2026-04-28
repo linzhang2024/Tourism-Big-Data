@@ -12,10 +12,12 @@
     "health": "python ../scripts/health_check.py"
   },
   "dependencies": {
+    "axios": "^1.15.2",
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.6",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^7.14.2"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

@@ -6,6 +6,29 @@ export interface TrendModel {
   score: number;
 }
 
+export interface PermissionResponse {
+  id: number;
+  name: string;
+  code: string;
+  description?: string;
+  created_at: string;
+}
+
+export interface RoleResponse {
+  id: number;
+  name: string;
+  code: string;
+  description?: string;
+  created_at: string;
+  permissions: PermissionResponse[];
+}
+
+export interface RoleCreate {
+  name: string;
+  code: string;
+  description?: string;
+}
+
 export interface Activity {
   time: string;
   name: string;
@@ -38,4 +61,31 @@ export interface ItineraryResponse {
   estimated_total_cost?: number;
   daily_plans: DayPlan[];
   tips?: string[];
+}
+
+export interface User {
+  id: number;
+  username: string;
+  email?: string;
+  role_code: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: User | null;
+  token: string | null;
+  loading: boolean;
 }

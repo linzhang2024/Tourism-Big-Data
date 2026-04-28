@@ -102,7 +102,7 @@ describe('TrendDashboard', () => {
     const errorMessage = '获取旅游趋势数据失败';
     vi.mocked(getTrends).mockRejectedValue(new Error(errorMessage));
 
-    const { container } = render(<TrendDashboard />);
+    render(<TrendDashboard />);
 
     await waitFor(() => {
       expect(screen.getByText('重新加载')).toBeInTheDocument();
