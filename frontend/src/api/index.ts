@@ -1,4 +1,5 @@
 import { ItineraryRequest, ItineraryResponse, TrendModel, RoleResponse, RoleCreate, PermissionResponse, StatsResponse } from '../types';
+import apiAxios from '../utils/axios';
 
 const API_BASE_URL = '/api';
 
@@ -88,25 +89,13 @@ export async function updateRolePermissions(roleId: number, permissionCodes: str
   return response.json();
 }
 
-export async function getStats(token: string): Promise<StatsResponse> {
-  console.log('[API] 调用 getStats，Token 长度:', token.length);
+export async function getStats(): Promise<StatsResponse> {
+  console.log('[API] 调用 getStats (使用 axios)');
   
-  const response = await fetch(`${API_BASE_URL}/stats/`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
+  const response = await apiAxios.get<StatsResponse>('/stats/');
 
   console.log('[API] getStats 响应状态:', response.status);
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: '获取统计数据失败' }));
-    console.error('[API] getStats 失败:', errorData);
-    throw new Error(errorData.detail || '获取统计数据失败');
-  }
-
-  const data = await response.json();
-  console.log('[API] getStats 成功:', data);
-  return data;
+  console.log('[API] getStats 成功:', response.data);
+  
+  return response.data;
 }
