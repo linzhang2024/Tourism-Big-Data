@@ -4,22 +4,16 @@ import { getStats } from '../api';
 import { StatsResponse } from '../types';
 
 const Dashboard: React.FC = () => {
-  const { user, token, hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
-      if (!token) {
-        setError('未登录，无法获取统计数据');
-        setLoading(false);
-        return;
-      }
-
       try {
         console.log('[Dashboard] 开始获取统计数据...');
-        const data = await getStats(token);
+        const data = await getStats();
         console.log('[Dashboard] 统计数据获取成功:', data);
         setStats(data);
       } catch (err) {
@@ -31,7 +25,7 @@ const Dashboard: React.FC = () => {
     };
 
     fetchStats();
-  }, [token]);
+  }, []);
 
   const getRoleDisplayName = (roleCode: string) => {
     switch (roleCode) {
