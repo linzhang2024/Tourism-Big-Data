@@ -8,6 +8,9 @@ interface AuthContextType extends AuthState {
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  hasPermission: (permission: string) => boolean;
+  hasAnyPermission: (permissions: string[]) => boolean;
+  hasAllPermissions: (permissions: string[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,7 +45,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (storedToken && storedUser) {
         try {
           const user = JSON.parse(storedUser) as User;
-          console.log(`[AuthContext] 从 localStorage 恢复用户: ${user.username}, 角色: ${user.role_code}`);
+          console.log(`[AuthContext] 从 localStorage 恢复用户: ${user.username}, 角色: ${user.role_code}, 权限: ${user.permissions}`);
           
           setState({
             isAuthenticated: true,
@@ -94,7 +97,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const data: LoginResponse = await response.json();
-      console.log(`[AuthContext] 登录成功: 用户='${data.user.username}', 角色='${data.user.role_code}'`);
+      console.log(`[AuthContext] 登录成功: 用户='${data.user.username}', 角色='${data.user.role_code}', 权限='${data.user.permissions}'`);
       console.log(`[AuthContext] 收到 Token, 长度: ${data.access_token.length}`);
 
       localStorage.setItem(TOKEN_KEY, data.access_token);
@@ -155,7 +158,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const user: User = await response.json();
-      console.log(`[AuthContext] 用户信息刷新成功: ${user.username}`);
+      console.log(`[AuthContext] 用户信息刷新成功: ${user.username}, 权限: ${user.permissions}`);
 
       localStorage.setItem(USER_KEY, JSON.stringify(user));
       
@@ -168,11 +171,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const hasPermission = (permission: string): boolean => {
+    if (!state.user || !state.user.permissions) {
+      console.log(`[AuthContext] hasPermission 检查: 用户未登录或没有权限列表，权限 '${permission}' 不通过`);
+      return false;
+    }
+    const hasIt = state.user.permissions.includes(permission);
+    console.log(`[AuthContext] hasPermission 检查: 权限 '${permission}' ${hasIt ? '通过' : '不通过'}`);
+    return hasIt;
+  };
+
+  const hasAnyPermission = (permissions: string[]): boolean => {
+    if (!state.user || !state.user.permissions) {
+      console.log(`[AuthContext] hasAnyPermission 检查: 用户未登录或没有权限列表，权限列表 ${permissions} 不通过`);
+      return false;
+    }
+    const hasAny = permissions.some(p => state.user!.permissions.includes(p));
+    console.log(`[AuthContext] hasAnyPermission 检查: 权限列表 ${permissions} ${hasAny ? '通过' : '不通过'}`);
+    return hasAny;
+  };
+
+  const hasAllPermissions = (permissions: string[]): boolean => {
+    if (!state.user || !state.user.permissions) {
+      console.log(`[AuthContext] hasAllPermissions 检查: 用户未登录或没有权限列表，权限列表 ${permissions} 不通过`);
+      return false;
+    }
+    const hasAll = permissions.every(p => state.user!.permissions.includes(p));
+    console.log(`[AuthContext] hasAllPermissions 检查: 权限列表 ${permissions} ${hasAll ? '通过' : '不通过'}`);
+    return hasAll;
+  };
+
   const value: AuthContextType = {
     ...state,
     login,
     logout,
     refreshUser,
+    hasPermission,
+    hasAnyPermission,
+    hasAllPermissions,
   };
 
   return (

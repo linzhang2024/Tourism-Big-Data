@@ -70,6 +70,7 @@ export interface User {
   role_code: string;
   created_at: string;
   updated_at?: string;
+  permissions: string[];
 }
 
 export interface LoginRequest {
@@ -89,3 +90,13 @@ export interface AuthState {
   token: string | null;
   loading: boolean;
 }
+
+export interface StatsResponse {
+  access_level: string;
+  data_retrieved_at: string;
+  stats: Record<string, any>;
+  user_role: string;
+  user_permissions: string[];
+}
+
+export type PermissionCode = 'data:view' | 'data:export' | 'spider:run' | 'sys:manage';

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -19,6 +19,7 @@ class UserResponse(UserBase):
     id: int = Field(..., description="用户唯一 ID")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: Optional[datetime] = Field(None, description="更新时间")
+    permissions: List[str] = Field(default=[], description="用户拥有的权限列表")
 
 
 class UserInDB(UserResponse):
