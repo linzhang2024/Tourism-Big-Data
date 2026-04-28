@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
+from app.models.permission import PermissionResponse
 
 
 class RoleBase(BaseModel):
@@ -18,3 +19,4 @@ class RoleResponse(RoleBase):
     
     id: int = Field(..., description="角色唯一 ID")
     created_at: datetime = Field(..., description="创建时间")
+    permissions: List[PermissionResponse] = Field(default_factory=list, description="角色拥有的权限列表")
