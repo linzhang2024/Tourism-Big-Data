@@ -60,6 +60,26 @@ def initialize_permissions():
             name="系统管理",
             code=PermissionCode.SYS_MANAGE,
             description="系统管理相关操作的权限"
+        ),
+        PermissionCreate(
+            name="查看行程",
+            code=PermissionCode.ITINERARY_VIEW,
+            description="查看行程列表和详情的权限"
+        ),
+        PermissionCreate(
+            name="创建行程",
+            code=PermissionCode.ITINERARY_CREATE,
+            description="创建新行程的权限"
+        ),
+        PermissionCreate(
+            name="更新行程",
+            code=PermissionCode.ITINERARY_UPDATE,
+            description="更新行程信息的权限"
+        ),
+        PermissionCreate(
+            name="删除行程",
+            code=PermissionCode.ITINERARY_DELETE,
+            description="删除行程的权限"
         )
     ]
     

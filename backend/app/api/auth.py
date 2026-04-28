@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Optional
+from typing import Optional, List
 
 from app.models.user import LoginRequest, LoginResponse, UserResponse
 from app.services.user_service import user_service
@@ -19,6 +19,70 @@ def get_user_permissions(role_code: str) -> list:
     if role:
         return [p.code for p in role.permissions]
     return []
+
+
+def get_current_user_dependency(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> UserResponse:
+    if not credentials:
+        logger.warning("[权限校验] 未提供 Token")
+        raise HTTPException(
+            status_code=401,
+            detail="未提供认证 Token"
+        )
+    
+    token = credentials.credentials
+    user_info = jwt_utils.get_user_from_token(token)
+    
+    if not user_info:
+        logger.warning("[权限校验] Token 无效或已过期")
+        raise HTTPException(
+            status_code=401,
+            detail="Token 无效或已过期"
+        )
+    
+    user = user_service.get_user_by_username(user_info["username"])
+    
+    if not user:
+        logger.warning(f"[权限校验] Token 中的用户不存在: {user_info['username']}")
+        raise HTTPException(
+            status_code=401,
+            detail="用户不存在"
+        )
+    
+    permissions = get_user_permissions(user.role_code)
+    
+    return UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        role_code=user.role_code,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+        permissions=permissions
+    )
+
+
+def require_permissions(required_permissions: List[str]):
+    def permission_checker(
+        current_user: UserResponse = Depends(get_current_user_dependency)
+    ) -> UserResponse:
+        user_permissions = current_user.permissions
+        logger.info(f"[权限校验] 用户 '{current_user.username}' 权限: {user_permissions}")
+        logger.info(f"[权限校验] 需要权限: {required_permissions}")
+        
+        for permission in required_permissions:
+            if permission not in user_permissions:
+                logger.warning(f"[权限校验] 用户 '{current_user.username}' 缺少权限: {permission}")
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"缺少权限: {permission}"
+                )
+        
+        logger.info(f"[权限校验] 用户 '{current_user.username}' 权限验证通过")
+        return current_user
+    
+    return permission_checker
 
 
 @router.post("/login", response_model=LoginResponse)

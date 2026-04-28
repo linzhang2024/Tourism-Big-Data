@@ -9,6 +9,10 @@ class PermissionCode(str, Enum):
     DATA_EXPORT = "data:export"
     SPIDER_RUN = "spider:run"
     SYS_MANAGE = "sys:manage"
+    ITINERARY_VIEW = "itinerary:view"
+    ITINERARY_CREATE = "itinerary:create"
+    ITINERARY_UPDATE = "itinerary:update"
+    ITINERARY_DELETE = "itinerary:delete"
 
 
 class PermissionBase(BaseModel):

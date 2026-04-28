@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from enum import Enum
+from datetime import datetime
 
 
 class InterestPreference(str, Enum):
@@ -44,3 +45,48 @@ class ItineraryResponse(BaseModel):
     estimated_total_cost: Optional[float] = Field(None, description="预估总费用")
     daily_plans: List[DayPlan] = Field(default_factory=list, description="每日行程计划")
     tips: Optional[List[str]] = Field(default_factory=list, description="旅行提示")
+
+
+class ItineraryCreate(BaseModel):
+    title: str = Field(..., description="行程标题")
+    departure: str = Field(..., description="出发地")
+    destination: str = Field(..., description="目的地")
+    days: int = Field(..., ge=1, le=30, description="行程天数")
+    budget: Optional[float] = Field(None, ge=0, description="预算金额")
+    estimated_total_cost: Optional[float] = Field(None, description="预估总费用")
+    daily_plans: List[DayPlan] = Field(default_factory=list, description="每日行程计划")
+    tips: Optional[List[str]] = Field(default_factory=list, description="旅行提示")
+    interests: Optional[List[InterestPreference]] = Field(default_factory=list, description="兴趣偏好列表")
+    travel_style: Optional[str] = Field(None, description="旅行风格")
+
+
+class ItineraryUpdate(BaseModel):
+    title: Optional[str] = Field(None, description="行程标题")
+    departure: Optional[str] = Field(None, description="出发地")
+    destination: Optional[str] = Field(None, description="目的地")
+    days: Optional[int] = Field(None, ge=1, le=30, description="行程天数")
+    budget: Optional[float] = Field(None, ge=0, description="预算金额")
+    estimated_total_cost: Optional[float] = Field(None, description="预估总费用")
+    daily_plans: Optional[List[DayPlan]] = Field(None, description="每日行程计划")
+    tips: Optional[List[str]] = Field(None, description="旅行提示")
+    interests: Optional[List[InterestPreference]] = Field(None, description="兴趣偏好列表")
+    travel_style: Optional[str] = Field(None, description="旅行风格")
+
+
+class ItineraryDetail(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int = Field(..., description="行程唯一ID")
+    user_id: int = Field(..., description="创建用户ID")
+    title: str = Field(..., description="行程标题")
+    departure: str = Field(..., description="出发地")
+    destination: str = Field(..., description="目的地")
+    days: int = Field(..., description="行程天数")
+    budget: Optional[float] = Field(None, description="预算金额")
+    estimated_total_cost: Optional[float] = Field(None, description="预估总费用")
+    daily_plans: List[DayPlan] = Field(default_factory=list, description="每日行程计划")
+    tips: Optional[List[str]] = Field(default_factory=list, description="旅行提示")
+    interests: Optional[List[str]] = Field(default_factory=list, description="兴趣偏好列表")
+    travel_style: Optional[str] = Field(None, description="旅行风格")
+    created_at: datetime = Field(..., description="创建时间")
+    updated_at: Optional[datetime] = Field(None, description="更新时间")
