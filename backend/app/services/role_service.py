@@ -1,6 +1,7 @@
 from typing import List, Optional
 from datetime import datetime
 from app.models.role import RoleCreate, RoleResponse
+from app.models.permission import PermissionResponse
 
 
 class RoleService:
@@ -14,7 +15,8 @@ class RoleService:
             name=role_create.name,
             code=role_create.code,
             description=role_create.description,
-            created_at=datetime.now()
+            created_at=datetime.now(),
+            permissions=[]
         )
         self.roles.append(role)
         self.next_id += 1
@@ -31,6 +33,23 @@ class RoleService:
 
     def role_exists_by_code(self, code: str) -> bool:
         return self.get_role_by_code(code) is not None
+
+    def add_permission_to_role(self, role_code: str, permission: PermissionResponse) -> bool:
+        role = self.get_role_by_code(role_code)
+        if role is None:
+            return False
+        for existing_perm in role.permissions:
+            if existing_perm.code == permission.code:
+                return False
+        role.permissions.append(permission)
+        return True
+
+    def add_permissions_to_role(self, role_code: str, permissions: List[PermissionResponse]) -> int:
+        count = 0
+        for permission in permissions:
+            if self.add_permission_to_role(role_code, permission):
+                count += 1
+        return count
 
 
 role_service = RoleService()
