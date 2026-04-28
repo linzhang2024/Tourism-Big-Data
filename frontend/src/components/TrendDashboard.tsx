@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { EChartsOption } from 'echarts';
 import { TrendModel } from '../types';

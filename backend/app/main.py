@@ -7,8 +7,10 @@ from app.api.itinerary import router as itinerary_router
 from app.api.trend import router as trend_router
 from app.api.role import router as role_router
 from app.api.permission import router as permission_router
+from app.api.auth import router as auth_router
 from app.services.role_service import role_service
 from app.services.permission_service import permission_service
+from app.services.user_service import user_service
 from app.models.role import RoleCreate
 from app.models.permission import PermissionCreate, PermissionCode
 
@@ -93,11 +95,12 @@ def initialize_role_permissions():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("[权限初始化] 开始系统初始化...")
+    logger.info("[系统初始化] 开始系统初始化...")
     initialize_roles()
     initialize_permissions()
     initialize_role_permissions()
-    logger.info("[权限初始化] 系统初始化完成")
+    user_service.initialize_default_users()
+    logger.info("[系统初始化] 系统初始化完成")
     yield
 
 
@@ -120,6 +123,7 @@ app.include_router(itinerary_router, prefix="/api/itinerary", tags=["行程规�
 app.include_router(trend_router, prefix="/api/trends", tags=["旅游趋势"])
 app.include_router(role_router, prefix="/api/roles", tags=["角色管理"])
 app.include_router(permission_router, prefix="/api/permissions", tags=["权限管理"])
+app.include_router(auth_router, prefix="/api/auth", tags=["认证"])
 
 
 @app.get("/")

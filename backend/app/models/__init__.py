@@ -6,6 +6,14 @@ from .itinerary import (
     InterestPreference,
 )
 from .trend import TrendModel
+from .user import (
+    UserBase,
+    UserCreate,
+    UserResponse,
+    UserInDB,
+    LoginRequest,
+    LoginResponse,
+)
 
 __all__ = [
     "ItineraryRequest",
@@ -14,4 +22,10 @@ __all__ = [
     "Activity",
     "InterestPreference",
     "TrendModel",
+    "UserBase",
+    "UserCreate",
+    "UserResponse",
+    "UserInDB",
+    "LoginRequest",
+    "LoginResponse",
 ]
