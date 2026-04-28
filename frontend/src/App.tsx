@@ -1,42 +1,21 @@
 import React, { useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { ItineraryForm } from './components/ItineraryForm';
-import { ItineraryResult } from './components/ItineraryResult';
 import { RoleManagement } from './components/RoleManagement';
 import { PermissionManagement } from './components/PermissionManagement';
+import { ItineraryManagement } from './components/ItineraryManagement';
 import Dashboard from './components/Dashboard';
 import LoginPage from './components/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './contexts/AuthContext';
-import { ItineraryRequest, ItineraryResponse } from './types';
-import { generateItinerary } from './api';
 import './App.css';
 
 type TabType = 'dashboard' | 'itinerary' | 'roles' | 'permissions';
 
 const MainApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-  const [itinerary, setItinerary] = useState<ItineraryResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-
-  const handleSubmit = async (request: ItineraryRequest) => {
-    setLoading(true);
-    setError(null);
-    setItinerary(null);
-    
-    try {
-      const response = await generateItinerary(request);
-      setItinerary(response);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '生成行程失败，请稍后重试');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLogout = () => {
     console.log('[MainApp] 用户点击登出按钮');
@@ -138,17 +117,7 @@ const MainApp: React.FC = () => {
           {activeTab === 'dashboard' ? (
             <Dashboard />
           ) : activeTab === 'itinerary' ? (
-            <>
-              <ItineraryForm onSubmit={handleSubmit} loading={loading} />
-              
-              {error && (
-                <div className="error-message">
-                  {error}
-                </div>
-              )}
-              
-              {itinerary && <ItineraryResult itinerary={itinerary} />}
-            </>
+            <ItineraryManagement />
           ) : activeTab === 'roles' ? (
             <RoleManagement />
           ) : (

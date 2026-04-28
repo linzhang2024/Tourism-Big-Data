@@ -63,6 +63,49 @@ export interface ItineraryResponse {
   tips?: string[];
 }
 
+export interface ItineraryCreate {
+  title: string;
+  departure: string;
+  destination: string;
+  days: number;
+  budget?: number;
+  estimated_total_cost?: number;
+  daily_plans: DayPlan[];
+  tips?: string[];
+  interests?: InterestPreference[];
+  travel_style?: string;
+}
+
+export interface ItineraryUpdate {
+  title?: string;
+  departure?: string;
+  destination?: string;
+  days?: number;
+  budget?: number;
+  estimated_total_cost?: number;
+  daily_plans?: DayPlan[];
+  tips?: string[];
+  interests?: InterestPreference[];
+  travel_style?: string;
+}
+
+export interface ItineraryDetail {
+  id: number;
+  user_id: number;
+  title: string;
+  departure: string;
+  destination: string;
+  days: number;
+  budget?: number;
+  estimated_total_cost?: number;
+  daily_plans: DayPlan[];
+  tips?: string[];
+  interests?: string[];
+  travel_style?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface User {
   id: number;
   username: string;

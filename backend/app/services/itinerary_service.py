@@ -1,12 +1,19 @@
-from typing import List
+import logging
+from typing import List, Optional
+from datetime import datetime
 
 from app.models.itinerary import (
     ItineraryRequest, 
     ItineraryResponse, 
+    ItineraryCreate, 
+    ItineraryUpdate, 
+    ItineraryDetail,
     DayPlan, 
     Activity, 
     InterestPreference
 )
+
+logger = logging.getLogger(__name__)
 
 
 def generate_mock_itinerary(request: ItineraryRequest) -> ItineraryResponse:
@@ -95,3 +102,76 @@ def generate_mock_itinerary(request: ItineraryRequest) -> ItineraryResponse:
             "建议购买旅行保险，保障旅途安全",
         ]
     )
+
+
+class ItineraryService:
+    def __init__(self):
+        self.itineraries: List[ItineraryDetail] = []
+        self.next_id: int = 1
+
+    def create_itinerary(self, itinerary_create: ItineraryCreate, user_id: int) -> ItineraryDetail:
+        itinerary = ItineraryDetail(
+            id=self.next_id,
+            user_id=user_id,
+            title=itinerary_create.title,
+            departure=itinerary_create.departure,
+            destination=itinerary_create.destination,
+            days=itinerary_create.days,
+            budget=itinerary_create.budget,
+            estimated_total_cost=itinerary_create.estimated_total_cost,
+            daily_plans=itinerary_create.daily_plans,
+            tips=itinerary_create.tips,
+            interests=[i.value for i in itinerary_create.interests] if itinerary_create.interests else [],
+            travel_style=itinerary_create.travel_style,
+            created_at=datetime.now(),
+            updated_at=None
+        )
+        self.itineraries.append(itinerary)
+        self.next_id += 1
+        logger.info(f"[行程服务] 创建行程: ID={itinerary.id}, 标题={itinerary.title}, 用户ID={user_id}")
+        return itinerary
+
+    def get_all_itineraries(self) -> List[ItineraryDetail]:
+        logger.info(f"[行程服务] 获取所有行程列表，共 {len(self.itineraries)} 条")
+        return self.itineraries
+
+    def get_itinerary_by_id(self, itinerary_id: int) -> Optional[ItineraryDetail]:
+        for itinerary in self.itineraries:
+            if itinerary.id == itinerary_id:
+                logger.info(f"[行程服务] 获取行程详情: ID={itinerary_id}")
+                return itinerary
+        logger.warning(f"[行程服务] 行程不存在: ID={itinerary_id}")
+        return None
+
+    def update_itinerary(self, itinerary_id: int, itinerary_update: ItineraryUpdate) -> Optional[ItineraryDetail]:
+        itinerary = self.get_itinerary_by_id(itinerary_id)
+        if itinerary is None:
+            return None
+        
+        update_data = itinerary_update.model_dump(exclude_unset=True)
+        
+        for key, value in update_data.items():
+            if key == 'interests' and value is not None:
+                value = [i.value if hasattr(i, 'value') else i for i in value]
+            setattr(itinerary, key, value)
+        
+        itinerary.updated_at = datetime.now()
+        logger.info(f"[行程服务] 更新行程: ID={itinerary_id}, 更新字段={list(update_data.keys())}")
+        return itinerary
+
+    def delete_itinerary(self, itinerary_id: int) -> bool:
+        for i, itinerary in enumerate(self.itineraries):
+            if itinerary.id == itinerary_id:
+                deleted = self.itineraries.pop(i)
+                logger.info(f"[行程服务] 删除行程: ID={itinerary_id}, 标题={deleted.title}")
+                return True
+        logger.warning(f"[行程服务] 删除失败，行程不存在: ID={itinerary_id}")
+        return False
+
+    def get_itineraries_by_user(self, user_id: int) -> List[ItineraryDetail]:
+        user_itineraries = [it for it in self.itineraries if it.user_id == user_id]
+        logger.info(f"[行程服务] 获取用户行程列表: 用户ID={user_id}, 共 {len(user_itineraries)} 条")
+        return user_itineraries
+
+
+itinerary_service = ItineraryService()

@@ -1,22 +1,51 @@
-import { ItineraryRequest, ItineraryResponse, TrendModel, RoleResponse, RoleCreate, PermissionResponse, StatsResponse } from '../types';
+import { 
+  ItineraryRequest, 
+  ItineraryResponse, 
+  TrendModel, 
+  RoleResponse, 
+  RoleCreate, 
+  PermissionResponse, 
+  StatsResponse,
+  ItineraryCreate,
+  ItineraryUpdate,
+  ItineraryDetail
+} from '../types';
 import apiAxios from '../utils/axios';
 
 const API_BASE_URL = '/api';
 
 export async function generateItinerary(request: ItineraryRequest): Promise<ItineraryResponse> {
-  const response = await fetch(`${API_BASE_URL}/itinerary/generate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(request),
-  });
+  const response = await apiAxios.post<ItineraryResponse>('/itinerary/generate', request);
+  return response.data;
+}
 
-  if (!response.ok) {
-    throw new Error('生成行程失败');
-  }
+export async function getItineraries(): Promise<ItineraryDetail[]> {
+  const response = await apiAxios.get<ItineraryDetail[]>('/itinerary/');
+  return response.data;
+}
 
-  return response.json();
+export async function getMyItineraries(): Promise<ItineraryDetail[]> {
+  const response = await apiAxios.get<ItineraryDetail[]>('/itinerary/my');
+  return response.data;
+}
+
+export async function getItineraryById(id: number): Promise<ItineraryDetail> {
+  const response = await apiAxios.get<ItineraryDetail>(`/itinerary/${id}`);
+  return response.data;
+}
+
+export async function createItinerary(itinerary: ItineraryCreate): Promise<ItineraryDetail> {
+  const response = await apiAxios.post<ItineraryDetail>('/itinerary/', itinerary);
+  return response.data;
+}
+
+export async function updateItinerary(id: number, itinerary: ItineraryUpdate): Promise<ItineraryDetail> {
+  const response = await apiAxios.put<ItineraryDetail>(`/itinerary/${id}`, itinerary);
+  return response.data;
+}
+
+export async function deleteItinerary(id: number): Promise<void> {
+  await apiAxios.delete(`/itinerary/${id}`);
 }
 
 export async function getTrends(cities?: string[]): Promise<TrendModel[]> {
