@@ -1,5 +1,5 @@
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
@@ -14,6 +14,7 @@ from app.services.permission_service import permission_service
 from app.services.user_service import user_service
 from app.models.role import RoleCreate
 from app.models.permission import PermissionCreate, PermissionCode
+from app.utils.log_broadcaster import log_broadcaster, setup_websocket_logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -117,6 +118,7 @@ def initialize_role_permissions():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("[系统初始化] 开始系统初始化...")
+    setup_websocket_logging()
     initialize_roles()
     initialize_permissions()
     initialize_role_permissions()
@@ -156,3 +158,17 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+
+@app.websocket("/api/logs")
+async def websocket_logs(websocket: WebSocket):
+    await log_broadcaster.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            logger.info(f"[WebSocket] 收到客户端消息: {data}")
+    except WebSocketDisconnect:
+        log_broadcaster.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"[WebSocket] 连接错误: {e}")
+        log_broadcaster.disconnect(websocket)
