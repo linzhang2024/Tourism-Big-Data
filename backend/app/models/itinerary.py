@@ -58,6 +58,7 @@ class ItineraryCreate(BaseModel):
     tips: Optional[List[str]] = Field(default_factory=list, description="旅行提示")
     interests: Optional[List[InterestPreference]] = Field(default_factory=list, description="兴趣偏好列表")
     travel_style: Optional[str] = Field(None, description="旅行风格")
+    is_ai_generated: Optional[bool] = Field(default=False, description="是否为AI生成")
 
 
 class ItineraryUpdate(BaseModel):
@@ -71,6 +72,7 @@ class ItineraryUpdate(BaseModel):
     tips: Optional[List[str]] = Field(None, description="旅行提示")
     interests: Optional[List[InterestPreference]] = Field(None, description="兴趣偏好列表")
     travel_style: Optional[str] = Field(None, description="旅行风格")
+    is_ai_generated: Optional[bool] = Field(None, description="是否为AI生成")
 
 
 class ItineraryDetail(BaseModel):
@@ -88,5 +90,6 @@ class ItineraryDetail(BaseModel):
     tips: Optional[List[str]] = Field(default_factory=list, description="旅行提示")
     interests: Optional[List[str]] = Field(default_factory=list, description="兴趣偏好列表")
     travel_style: Optional[str] = Field(None, description="旅行风格")
+    is_ai_generated: bool = Field(default=False, description="是否为AI生成")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: Optional[datetime] = Field(None, description="更新时间")

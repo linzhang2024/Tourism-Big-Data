@@ -74,6 +74,7 @@ export interface ItineraryCreate {
   tips?: string[];
   interests?: InterestPreference[];
   travel_style?: string;
+  is_ai_generated?: boolean;
 }
 
 export interface ItineraryUpdate {
@@ -87,6 +88,7 @@ export interface ItineraryUpdate {
   tips?: string[];
   interests?: InterestPreference[];
   travel_style?: string;
+  is_ai_generated?: boolean;
 }
 
 export interface ItineraryDetail {
@@ -102,6 +104,7 @@ export interface ItineraryDetail {
   tips?: string[];
   interests?: string[];
   travel_style?: string;
+  is_ai_generated: boolean;
   created_at: string;
   updated_at?: string;
 }

@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 
@@ -10,7 +11,7 @@ from app.models.itinerary import (
     ItineraryDetail
 )
 from app.models.user import UserResponse
-from app.services.itinerary_service import generate_mock_itinerary, itinerary_service
+from app.services.itinerary_service import generate_mock_itinerary, itinerary_service, ai_itinerary_service
 from app.api.auth import require_permissions, require_any_permission
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,27 @@ async def generate_itinerary(
 ):
     logger.info(f"[行程API] 用户 '{current_user.username}' 请求生成行程")
     return generate_mock_itinerary(request)
+
+
+@router.post("/generate-and-save", response_model=ItineraryDetail)
+async def generate_and_save_itinerary(
+    request: ItineraryRequest,
+    current_user: UserResponse = Depends(require_permissions(["itinerary:create"]))
+):
+    logger.info(f"[行程API] 用户 '{current_user.username}' (ID={current_user.id}) 请求AI生成并保存行程")
+    logger.info(f"[行程API] 参数: 目的地={request.destination}, 天数={request.days}, 出发地={request.departure}")
+    if request.budget:
+        logger.info(f"[行程API] 预算={request.budget} 元")
+    if request.interests:
+        logger.info(f"[行程API] 兴趣偏好={[i.value for i in request.interests]}")
+    
+    logger.info(f"[行程API] 开始模拟AI生成过程...")
+    await asyncio.sleep(2)
+    
+    saved = ai_itinerary_service.generate_and_save(request, current_user.id)
+    
+    logger.info(f"[行程API] AI行程生成并保存成功: ID={saved.id}, 标题={saved.title}")
+    return saved
 
 
 @router.get("/", response_model=List[ItineraryDetail])

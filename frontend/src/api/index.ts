@@ -19,6 +19,11 @@ export async function generateItinerary(request: ItineraryRequest): Promise<Itin
   return response.data;
 }
 
+export async function generateAndSaveItinerary(request: ItineraryRequest): Promise<ItineraryDetail> {
+  const response = await apiAxios.post<ItineraryDetail>('/itinerary/generate-and-save', request);
+  return response.data;
+}
+
 export async function getItineraries(): Promise<ItineraryDetail[]> {
   const response = await apiAxios.get<ItineraryDetail[]>('/itinerary/');
   return response.data;
