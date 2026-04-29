@@ -5,14 +5,16 @@ import {
   ItineraryUpdate, 
   DayPlan, 
   Activity,
-  InterestPreference 
+  InterestPreference,
+  ItineraryRequest 
 } from '../types';
 import { 
   getItineraries, 
   createItinerary, 
   updateItinerary, 
   deleteItinerary,
-  generateItinerary 
+  generateItinerary,
+  generateAndSaveItinerary 
 } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -57,6 +59,7 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
   const [showFormModal, setShowFormModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showAIGenerateModal, setShowAIGenerateModal] = useState(false);
   
   const [editingItinerary, setEditingItinerary] = useState<ItineraryDetail | null>(null);
   const [deletingItinerary, setDeletingItinerary] = useState<ItineraryDetail | null>(null);
@@ -67,6 +70,9 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedPlans, setGeneratedPlans] = useState<DayPlan[] | null>(null);
   const [generatedEstimatedCost, setGeneratedEstimatedCost] = useState<number | null>(null);
+  
+  const [aiFormData, setAiFormData] = useState<ItineraryFormData>(initialFormData);
+  const [isAIGenerating, setIsAIGenerating] = useState(false);
 
   const canView = hasAnyPermission(['itinerary:view', 'data:view']);
   const canViewDetail = hasPermission('itinerary:view');
@@ -267,6 +273,62 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
     }));
   };
 
+  const toggleAiInterest = (interest: InterestPreference) => {
+    setAiFormData(prev => ({
+      ...prev,
+      interests: prev.interests.includes(interest)
+        ? prev.interests.filter(i => i !== interest)
+        : [...prev.interests, interest],
+    }));
+  };
+
+  const openAIGenerateModal = () => {
+    if (!canCreate) {
+      console.log('[行程管理] 用户没有创建权限');
+      return;
+    }
+    setAiFormData(initialFormData);
+    setError(null);
+    setShowAIGenerateModal(true);
+  };
+
+  const handleAIGenerate = async () => {
+    setIsAIGenerating(true);
+    setError(null);
+    try {
+      console.log('[行程管理] 开始AI生成行程...');
+      console.log('[行程管理] 参数:', {
+        destination: aiFormData.destination,
+        days: aiFormData.days,
+        departure: aiFormData.departure,
+        budget: aiFormData.budget,
+        interests: aiFormData.interests
+      });
+      
+      const request: ItineraryRequest = {
+        departure: aiFormData.departure,
+        destination: aiFormData.destination,
+        days: aiFormData.days,
+        budget: aiFormData.budget ? parseFloat(aiFormData.budget) : undefined,
+        interests: aiFormData.interests,
+        travel_style: aiFormData.travel_style || undefined,
+      };
+      
+      const savedItinerary = await generateAndSaveItinerary(request);
+      
+      console.log('[行程管理] AI行程生成并保存成功:', savedItinerary);
+      
+      setShowAIGenerateModal(false);
+      fetchItineraries();
+      
+    } catch (err) {
+      console.error('[行程管理] AI生成行程失败:', err);
+      setError(err instanceof Error ? err.message : 'AI生成行程失败');
+    } finally {
+      setIsAIGenerating(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('zh-CN');
   };
@@ -326,11 +388,24 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
       <div className="form-card">
         <div className="card-header">
           <h2>🗺️ 行程管理</h2>
-          {canCreate && (
-            <button className="add-btn" onClick={openCreateModal}>
-              ➕ 新增行程
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            {canCreate && (
+              <button 
+                className="add-btn" 
+                onClick={openAIGenerateModal}
+                style={{ 
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' 
+                }}
+              >
+                🤖 AI智能生成
+              </button>
+            )}
+            {canCreate && (
+              <button className="add-btn" onClick={openCreateModal}>
+                ➕ 新增行程
+              </button>
+            )}
+          </div>
         </div>
 
         {error && !hasAccessError && (
@@ -363,15 +438,39 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
                   <th>路线</th>
                   <th>天数</th>
                   <th>预估费用</th>
+                  <th>来源</th>
                   <th>创建时间</th>
                   <th>操作</th>
                 </tr>
               </thead>
               <tbody>
                 {itineraries.map(itinerary => (
-                  <tr key={itinerary.id}>
+                  <tr 
+                    key={itinerary.id}
+                    style={{
+                      backgroundColor: itinerary.is_ai_generated ? '#f0fdf4' : 'transparent',
+                      borderLeft: itinerary.is_ai_generated ? '4px solid #10b981' : 'none'
+                    }}
+                  >
                     <td>{itinerary.id}</td>
-                    <td className="role-name">{itinerary.title}</td>
+                    <td className="role-name">
+                      {itinerary.title}
+                      {itinerary.is_ai_generated && (
+                        <span 
+                          style={{
+                            marginLeft: '0.5rem',
+                            fontSize: '0.75rem',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                            color: 'white',
+                            fontWeight: 600
+                          }}
+                        >
+                          🤖 AI生成
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <span>{itinerary.departure}</span>
                       <span style={{ margin: '0 0.5rem' }}>→</span>
@@ -382,6 +481,13 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
                       {itinerary.estimated_total_cost 
                         ? `¥${itinerary.estimated_total_cost.toLocaleString()}` 
                         : '-'}
+                    </td>
+                    <td>
+                      {itinerary.is_ai_generated ? (
+                        <span style={{ color: '#059669', fontWeight: 600 }}>🤖 AI智能</span>
+                      ) : (
+                        <span style={{ color: '#6b7280' }}>👤 手动创建</span>
+                      )}
                     </td>
                     <td className="date-cell">{formatDate(itinerary.created_at)}</td>
                     <td>
@@ -755,6 +861,159 @@ export const ItineraryManagement: React.FC<ItineraryManagementProps> = () => {
               >
                 关闭
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAIGenerateModal && (
+        <div className="modal-overlay" onClick={() => !isAIGenerating && setShowAIGenerateModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>🤖 AI 智能生成行程</h3>
+              <button className="close-btn" onClick={() => setShowAIGenerateModal(false)} disabled={isAIGenerating}>
+                ×
+              </button>
+            </div>
+
+            {isAIGenerating ? (
+              <div style={{ textAlign: 'center', padding: '3rem' }}>
+                <div style={{ 
+                  fontSize: '4rem', 
+                  marginBottom: '1.5rem',
+                  animation: 'spin 1s linear infinite'
+                }}>
+                  🤖
+                </div>
+                <h3 style={{ color: '#667eea', marginBottom: '1rem' }}>AI 正在为您规划行程...</h3>
+                <p style={{ color: '#6b7280', marginBottom: '0.5rem' }}>
+                  正在分析目的地 {aiFormData.destination} 的旅游资源
+                </p>
+                <p style={{ color: '#6b7280', marginBottom: '0.5rem' }}>
+                  为您设计 {aiFormData.days} 天的精彩行程
+                </p>
+                <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                  请稍候，这可能需要几秒钟...
+                </p>
+              </div>
+            ) : (
+              <div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="ai-departure">出发地 <span className="required">*</span></label>
+                    <input
+                      id="ai-departure"
+                      type="text"
+                      value={aiFormData.departure}
+                      onChange={e => setAiFormData(prev => ({ ...prev, departure: e.target.value }))}
+                      placeholder="例如：北京"
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="ai-destination">目的地 <span className="required">*</span></label>
+                    <input
+                      id="ai-destination"
+                      type="text"
+                      value={aiFormData.destination}
+                      onChange={e => setAiFormData(prev => ({ ...prev, destination: e.target.value }))}
+                      placeholder="例如：三亚"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="ai-days">行程天数 <span className="required">*</span></label>
+                    <select
+                      id="ai-days"
+                      value={aiFormData.days}
+                      onChange={e => setAiFormData(prev => ({ ...prev, days: parseInt(e.target.value) }))}
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 21, 30].map(d => (
+                        <option key={d} value={d}>{d} 天</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="ai-budget">预算金额（元）</label>
+                    <input
+                      id="ai-budget"
+                      type="number"
+                      value={aiFormData.budget}
+                      onChange={e => setAiFormData(prev => ({ ...prev, budget: e.target.value }))}
+                      placeholder="例如：5000"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>兴趣偏好</label>
+                  <div className="checkbox-group">
+                    {interestOptions.map(option => (
+                      <div
+                        key={option.value}
+                        className={`checkbox-item ${aiFormData.interests.includes(option.value) ? 'selected' : ''}`}
+                        onClick={() => toggleAiInterest(option.value)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={aiFormData.interests.includes(option.value)}
+                          onChange={() => toggleAiInterest(option.value)}
+                          style={{ display: 'none' }}
+                        />
+                        <span>{option.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ 
+                  background: '#dbeafe', 
+                  borderRadius: '8px', 
+                  padding: '1rem',
+                  marginBottom: '1.5rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '1.25rem' }}>💡</span>
+                    <strong style={{ color: '#1e40af' }}>AI 智能提示</strong>
+                  </div>
+                  <p style={{ color: '#1e3a8a', fontSize: '0.875rem', margin: 0 }}>
+                    选择您的兴趣偏好后，AI 将为您生成个性化的行程方案，包括每日活动安排、景点推荐和预估费用。生成后自动保存到您的行程列表中。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="cancel-btn"
+                onClick={() => setShowAIGenerateModal(false)}
+                disabled={isAIGenerating}
+              >
+                取消
+              </button>
+              {!isAIGenerating && (
+                <button
+                  type="button"
+                  onClick={handleAIGenerate}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  🤖 开始生成
+                </button>
+              )}
             </div>
           </div>
         </div>
