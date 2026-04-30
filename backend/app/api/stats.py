@@ -1,10 +1,10 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, List
 from datetime import datetime
 
-from app.models.stats import StatsResponse, BasicStats, DetailedStats, AdminStats
+from app.models.stats import StatsResponse, BasicStats, DetailedStats, AdminStats, AnalysisResponse
 from app.models.permission import PermissionCode
 from app.utils.jwt_utils import jwt_utils
 from app.services.role_service import role_service
@@ -119,3 +119,39 @@ async def get_stats(user_info: dict = Depends(get_current_user_permissions)):
     logger.info(f"[统计 API] 响应内容: {response.model_dump()}")
     
     return response
+
+
+@router.get("/analysis", response_model=AnalysisResponse)
+async def get_analysis(
+    user_info: dict = Depends(get_current_user_permissions),
+    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM"),
+    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM"),
+    destination_categories: Optional[List[str]] = Query(None, description="目的地类别筛选列表")
+):
+    username = user_info["username"]
+    role_code = user_info["role_code"]
+    permissions = user_info["permissions"]
+    
+    logger.info(f"[统计 API] 用户 '{username}' (角色: {role_code}) 请求数据分析")
+    logger.info(f"[统计 API] 参数: start_date={start_date}, end_date={end_date}, categories={destination_categories}")
+    
+    has_data_view = PermissionCode.DATA_VIEW in permissions
+    has_data_export = PermissionCode.DATA_EXPORT in permissions
+    has_sys_manage = PermissionCode.SYS_MANAGE in permissions
+    
+    if not (has_data_view or has_data_export or has_sys_manage):
+        logger.warning(f"[统计 API] 用户 '{username}' 没有访问数据分析的权限")
+        raise HTTPException(
+            status_code=403,
+            detail="您没有访问数据分析的权限"
+        )
+    
+    analysis_data = stats_service.get_analysis_data(
+        start_date=start_date,
+        end_date=end_date,
+        destination_categories=destination_categories
+    )
+    
+    logger.info(f"[统计 API] 成功返回数据分析给用户 '{username}'")
+    
+    return analysis_data

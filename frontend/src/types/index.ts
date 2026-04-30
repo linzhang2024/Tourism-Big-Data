@@ -146,3 +146,36 @@ export interface StatsResponse {
 }
 
 export type PermissionCode = 'data:view' | 'data:export' | 'spider:run' | 'sys:manage';
+
+export interface CityHotspot {
+  name: string;
+  count: number;
+  avg_budget: number;
+  total_spending: number;
+}
+
+export interface MonthlyTrend {
+  month: string;
+  total_itineraries: number;
+  total_spending: number;
+  avg_budget: number;
+}
+
+export interface AnalysisResponse {
+  generated_at: string;
+  period: {
+    start_date: string | null;
+    end_date: string | null;
+  };
+  city_hotspots: CityHotspot[];
+  monthly_trends: MonthlyTrend[];
+  summary: {
+    total_itineraries: number;
+    total_spending: number;
+    total_budget: number;
+    avg_spending_per_itinerary: number;
+    total_cities: number;
+    top_city: string | null;
+    top_city_count: number;
+  };
+}

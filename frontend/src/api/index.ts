@@ -8,7 +8,8 @@ import {
   StatsResponse,
   ItineraryCreate,
   ItineraryUpdate,
-  ItineraryDetail
+  ItineraryDetail,
+  AnalysisResponse
 } from '../types';
 import apiAxios from '../utils/axios';
 
@@ -130,6 +131,38 @@ export async function getStats(): Promise<StatsResponse> {
 
   console.log('[API] getStats 响应状态:', response.status);
   console.log('[API] getStats 成功:', response.data);
+  
+  return response.data;
+}
+
+export interface AnalysisParams {
+  start_date?: string;
+  end_date?: string;
+  destination_categories?: string[];
+}
+
+export async function getAnalysis(params?: AnalysisParams): Promise<AnalysisResponse> {
+  console.log('[API] 调用 getAnalysis，参数:', params);
+  
+  const url = new URL(`${API_BASE_URL}/stats/analysis`);
+  
+  if (params) {
+    if (params.start_date) {
+      url.searchParams.append('start_date', params.start_date);
+    }
+    if (params.end_date) {
+      url.searchParams.append('end_date', params.end_date);
+    }
+    if (params.destination_categories && params.destination_categories.length > 0) {
+      params.destination_categories.forEach(city => {
+        url.searchParams.append('destination_categories', city);
+      });
+    }
+  }
+
+  const response = await apiAxios.get<AnalysisResponse>(url.toString());
+
+  console.log('[API] getAnalysis 成功:', response.data);
   
   return response.data;
 }

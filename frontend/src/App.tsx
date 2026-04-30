@@ -4,12 +4,13 @@ import { RoleManagement } from './components/RoleManagement';
 import { PermissionManagement } from './components/PermissionManagement';
 import { ItineraryManagement } from './components/ItineraryManagement';
 import Dashboard from './components/Dashboard';
+import DataInsights from './components/DataInsights';
 import LoginPage from './components/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './contexts/AuthContext';
 import './App.css';
 
-type TabType = 'dashboard' | 'itinerary' | 'roles' | 'permissions';
+type TabType = 'dashboard' | 'insights' | 'itinerary' | 'roles' | 'permissions';
 
 const MainApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -92,6 +93,12 @@ const MainApp: React.FC = () => {
             📊 数据面板
           </button>
           <button
+            className={`nav-tab ${activeTab === 'insights' ? 'active' : ''}`}
+            onClick={() => setActiveTab('insights')}
+          >
+            📈 数据洞察
+          </button>
+          <button
             className={`nav-tab ${activeTab === 'itinerary' ? 'active' : ''}`}
             onClick={() => setActiveTab('itinerary')}
           >
@@ -116,6 +123,8 @@ const MainApp: React.FC = () => {
         <div className="container">
           {activeTab === 'dashboard' ? (
             <Dashboard />
+          ) : activeTab === 'insights' ? (
+            <DataInsights />
           ) : activeTab === 'itinerary' ? (
             <ItineraryManagement />
           ) : activeTab === 'roles' ? (
