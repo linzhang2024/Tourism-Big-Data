@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 from datetime import datetime
+from copy import deepcopy
 
 from app.models.itinerary import (
     ItineraryRequest, 
@@ -12,8 +13,14 @@ from app.models.itinerary import (
     Activity, 
     InterestPreference
 )
+from app.utils.cache_manager import cache_manager
 
 logger = logging.getLogger(__name__)
+
+CACHE_TTL = 60
+CACHE_KEY_ALL = "itinerary:all"
+CACHE_KEY_USER_PREFIX = "itinerary:user:"
+CACHE_KEY_DETAIL_PREFIX = "itinerary:detail:"
 
 
 def generate_mock_itinerary(request: ItineraryRequest) -> ItineraryResponse:
@@ -109,6 +116,14 @@ class ItineraryService:
         self.itineraries: List[ItineraryDetail] = []
         self.next_id: int = 1
 
+    def _invalidate_cache(self, user_id: Optional[int] = None, itinerary_id: Optional[int] = None) -> None:
+        cache_manager.delete(CACHE_KEY_ALL)
+        if user_id is not None:
+            cache_manager.delete(f"{CACHE_KEY_USER_PREFIX}{user_id}")
+        if itinerary_id is not None:
+            cache_manager.delete(f"{CACHE_KEY_DETAIL_PREFIX}{itinerary_id}")
+        logger.info("[行程服务] 缓存已失效")
+    
     def create_itinerary(self, itinerary_create: ItineraryCreate, user_id: int) -> ItineraryDetail:
         itinerary = ItineraryDetail(
             id=self.next_id,
@@ -129,26 +144,49 @@ class ItineraryService:
         )
         self.itineraries.append(itinerary)
         self.next_id += 1
+        self._invalidate_cache(user_id=user_id)
         logger.info(f"[行程服务] 创建行程: ID={itinerary.id}, 标题={itinerary.title}, 用户ID={user_id}, AI生成={itinerary.is_ai_generated}")
         return itinerary
-
+    
     def get_all_itineraries(self) -> List[ItineraryDetail]:
-        logger.info(f"[行程服务] 获取所有行程列表，共 {len(self.itineraries)} 条")
-        return self.itineraries
+        cached = cache_manager.get(CACHE_KEY_ALL)
+        if cached is not None:
+            logger.info(f"[行程服务] 缓存命中 - 获取所有行程列表，共 {len(cached)} 条")
+            return cached
+        
+        logger.info(f"[行程服务] 缓存未命中 - 从数据库获取所有行程列表，共 {len(self.itineraries)} 条")
+        result = deepcopy(self.itineraries)
+        cache_manager.set(CACHE_KEY_ALL, result, ttl=CACHE_TTL)
+        return result
 
     def get_itinerary_by_id(self, itinerary_id: int) -> Optional[ItineraryDetail]:
+        cache_key = f"{CACHE_KEY_DETAIL_PREFIX}{itinerary_id}"
+        cached = cache_manager.get(cache_key)
+        if cached is not None:
+            logger.info(f"[行程服务] 缓存命中 - 获取行程详情: ID={itinerary_id}")
+            return cached
+        
         for itinerary in self.itineraries:
             if itinerary.id == itinerary_id:
-                logger.info(f"[行程服务] 获取行程详情: ID={itinerary_id}")
-                return itinerary
+                logger.info(f"[行程服务] 缓存未命中 - 从数据库获取行程详情: ID={itinerary_id}")
+                result = deepcopy(itinerary)
+                cache_manager.set(cache_key, result, ttl=CACHE_TTL)
+                return result
         logger.warning(f"[行程服务] 行程不存在: ID={itinerary_id}")
         return None
 
     def update_itinerary(self, itinerary_id: int, itinerary_update: ItineraryUpdate) -> Optional[ItineraryDetail]:
-        itinerary = self.get_itinerary_by_id(itinerary_id)
+        itinerary = None
+        for it in self.itineraries:
+            if it.id == itinerary_id:
+                itinerary = it
+                break
+        
         if itinerary is None:
+            logger.warning(f"[行程服务] 更新失败，行程不存在: ID={itinerary_id}")
             return None
         
+        user_id = itinerary.user_id
         update_data = itinerary_update.model_dump(exclude_unset=True)
         
         for key, value in update_data.items():
@@ -157,22 +195,34 @@ class ItineraryService:
             setattr(itinerary, key, value)
         
         itinerary.updated_at = datetime.now()
+        self._invalidate_cache(user_id=user_id, itinerary_id=itinerary_id)
         logger.info(f"[行程服务] 更新行程: ID={itinerary_id}, 更新字段={list(update_data.keys())}")
         return itinerary
 
     def delete_itinerary(self, itinerary_id: int) -> bool:
+        user_id: Optional[int] = None
         for i, itinerary in enumerate(self.itineraries):
             if itinerary.id == itinerary_id:
+                user_id = itinerary.user_id
                 deleted = self.itineraries.pop(i)
+                self._invalidate_cache(user_id=user_id, itinerary_id=itinerary_id)
                 logger.info(f"[行程服务] 删除行程: ID={itinerary_id}, 标题={deleted.title}")
                 return True
         logger.warning(f"[行程服务] 删除失败，行程不存在: ID={itinerary_id}")
         return False
 
     def get_itineraries_by_user(self, user_id: int) -> List[ItineraryDetail]:
+        cache_key = f"{CACHE_KEY_USER_PREFIX}{user_id}"
+        cached = cache_manager.get(cache_key)
+        if cached is not None:
+            logger.info(f"[行程服务] 缓存命中 - 获取用户行程列表: 用户ID={user_id}, 共 {len(cached)} 条")
+            return cached
+        
         user_itineraries = [it for it in self.itineraries if it.user_id == user_id]
-        logger.info(f"[行程服务] 获取用户行程列表: 用户ID={user_id}, 共 {len(user_itineraries)} 条")
-        return user_itineraries
+        logger.info(f"[行程服务] 缓存未命中 - 从数据库获取用户行程列表: 用户ID={user_id}, 共 {len(user_itineraries)} 条")
+        result = deepcopy(user_itineraries)
+        cache_manager.set(cache_key, result, ttl=CACHE_TTL)
+        return result
 
 
 class AIItenaryService:

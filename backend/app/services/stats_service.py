@@ -1,10 +1,14 @@
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from collections import defaultdict
 from datetime import datetime
+from copy import deepcopy
 
 from app.services.user_service import user_service
 from app.services.role_service import role_service
 from app.services.permission_service import permission_service
+from app.services.itinerary_service import itinerary_service
+from app.models.stats import CityHotspot, MonthlyTrend, AnalysisResponse
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +103,157 @@ class StatsService:
             "total_roles": self.get_total_roles(),
             "recent_logins": self.get_recent_logins()
         }
+
+    def _filter_itineraries_by_date(
+        self, 
+        itineraries: List, 
+        start_date: Optional[str] = None, 
+        end_date: Optional[str] = None
+    ) -> List:
+        if not start_date and not end_date:
+            return itineraries
+        
+        filtered = []
+        for itinerary in itineraries:
+            created_month = itinerary.created_at.strftime("%Y-%m")
+            
+            if start_date and created_month < start_date:
+                continue
+            if end_date and created_month > end_date:
+                continue
+            
+            filtered.append(itinerary)
+        
+        logger.info(f"[统计服务] 日期筛选: 原始 {len(itineraries)} 条，筛选后 {len(filtered)} 条")
+        return filtered
+
+    def _filter_itineraries_by_categories(
+        self, 
+        itineraries: List, 
+        categories: Optional[List[str]] = None
+    ) -> List:
+        if not categories or len(categories) == 0:
+            return itineraries
+        
+        filtered = []
+        for itinerary in itineraries:
+            if itinerary.destination in categories:
+                filtered.append(itinerary)
+        
+        logger.info(f"[统计服务] 类别筛选: 原始 {len(itineraries)} 条，筛选后 {len(filtered)} 条")
+        return filtered
+
+    def _calculate_city_hotspots(self, itineraries: List) -> List[CityHotspot]:
+        city_stats = defaultdict(lambda: {
+            "count": 0,
+            "total_budget": 0.0,
+            "total_spending": 0.0
+        })
+        
+        for itinerary in itineraries:
+            city = itinerary.destination
+            budget = itinerary.budget or 0.0
+            spending = itinerary.estimated_total_cost or 0.0
+            
+            city_stats[city]["count"] += 1
+            city_stats[city]["total_budget"] += budget
+            city_stats[city]["total_spending"] += spending
+        
+        hotspots = []
+        for city, stats in city_stats.items():
+            count = stats["count"]
+            avg_budget = stats["total_budget"] / count if count > 0 else 0.0
+            hotspots.append(CityHotspot(
+                name=city,
+                count=count,
+                avg_budget=round(avg_budget, 2),
+                total_spending=round(stats["total_spending"], 2)
+            ))
+        
+        hotspots.sort(key=lambda x: x.count, reverse=True)
+        
+        logger.info(f"[统计服务] 计算城市热度: 共 {len(hotspots)} 个城市")
+        return hotspots
+
+    def _calculate_monthly_trends(self, itineraries: List) -> List[MonthlyTrend]:
+        monthly_stats = defaultdict(lambda: {
+            "count": 0,
+            "total_spending": 0.0,
+            "total_budget": 0.0
+        })
+        
+        for itinerary in itineraries:
+            month = itinerary.created_at.strftime("%Y-%m")
+            budget = itinerary.budget or 0.0
+            spending = itinerary.estimated_total_cost or 0.0
+            
+            monthly_stats[month]["count"] += 1
+            monthly_stats[month]["total_spending"] += spending
+            monthly_stats[month]["total_budget"] += budget
+        
+        trends = []
+        for month, stats in monthly_stats.items():
+            count = stats["count"]
+            avg_budget = stats["total_budget"] / count if count > 0 else 0.0
+            trends.append(MonthlyTrend(
+                month=month,
+                total_itineraries=count,
+                total_spending=round(stats["total_spending"], 2),
+                avg_budget=round(avg_budget, 2)
+            ))
+        
+        trends.sort(key=lambda x: x.month)
+        
+        logger.info(f"[统计服务] 计算月度趋势: 共 {len(trends)} 个月份")
+        return trends
+
+    def get_analysis_data(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        destination_categories: Optional[List[str]] = None
+    ) -> AnalysisResponse:
+        logger.info(f"[统计服务] 开始数据分析: start_date={start_date}, end_date={end_date}, categories={destination_categories}")
+        
+        all_itineraries = itinerary_service.get_all_itineraries()
+        logger.info(f"[统计服务] 获取到 {len(all_itineraries)} 条行程数据")
+        
+        filtered = self._filter_itineraries_by_date(all_itineraries, start_date, end_date)
+        filtered = self._filter_itineraries_by_categories(filtered, destination_categories)
+        
+        if len(filtered) == 0:
+            logger.warning("[统计服务] 筛选后无数据")
+        
+        city_hotspots = self._calculate_city_hotspots(filtered)
+        monthly_trends = self._calculate_monthly_trends(filtered)
+        
+        total_itineraries = len(filtered)
+        total_spending = sum(h.total_spending for h in city_hotspots)
+        total_budget = sum(h.avg_budget * h.count for h in city_hotspots)
+        
+        summary = {
+            "total_itineraries": total_itineraries,
+            "total_spending": round(total_spending, 2),
+            "total_budget": round(total_budget, 2),
+            "avg_spending_per_itinerary": round(total_spending / total_itineraries, 2) if total_itineraries > 0 else 0.0,
+            "total_cities": len(city_hotspots),
+            "top_city": city_hotspots[0].name if len(city_hotspots) > 0 else None,
+            "top_city_count": city_hotspots[0].count if len(city_hotspots) > 0 else 0
+        }
+        
+        response = AnalysisResponse(
+            generated_at=datetime.now(),
+            period={
+                "start_date": start_date,
+                "end_date": end_date
+            },
+            city_hotspots=city_hotspots,
+            monthly_trends=monthly_trends,
+            summary=summary
+        )
+        
+        logger.info(f"[统计服务] 数据分析完成: 汇总={summary}")
+        return response
 
 
 stats_service = StatsService()
