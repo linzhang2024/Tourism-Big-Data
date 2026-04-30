@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { EChartsOption } from 'echarts';
-import { AnalysisResponse, CityHotspot, MonthlyTrend } from '../types';
-import { getAnalysis, AnalysisParams } from '../api';
+import { AnalysisResponse, AnalysisParams } from '../types';
+import { getAnalysis } from '../api';
 
 type ErrorType = 'network' | 'auth' | 'forbidden' | 'not_found' | 'server' | 'unknown';
 
@@ -13,16 +13,29 @@ interface ErrorInfo {
   detail?: string;
 }
 
+interface CachedRequest {
+  params: string;
+  data: AnalysisResponse;
+  timestamp: number;
+}
+
+const CACHE_TTL = 5 * 60 * 1000;
+
 const DataInsights: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [errorInfo, setErrorInfo] = useState<ErrorInfo | null>(null);
   const [analysisData, setAnalysisData] = useState<AnalysisResponse | null>(null);
+  const [availableCities, setAvailableCities] = useState<string[]>([]);
   
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
-  const [availableCities, setAvailableCities] = useState<string[]>([]);
-  const [previousData, setPreviousData] = useState<AnalysisResponse | null>(null);
+  
+  const isFetchingRef = useRef(false);
+  const previousDataRef = useRef<AnalysisResponse | null>(null);
+  const cacheRef = useRef<Map<string, CachedRequest>>(new Map());
+  const lastParamsRef = useRef<string | null>(null);
+  const analysisDataRef = useRef<AnalysisResponse | null>(null);
 
   const parseError = (err: unknown): ErrorInfo => {
     console.error('[DataInsights] 请求错误:', err);
@@ -100,18 +113,75 @@ const DataInsights: React.FC = () => {
     }
   };
 
-  const fetchData = useCallback(async (params?: AnalysisParams) => {
+  const paramsToKey = (params?: AnalysisParams): string => {
+    if (!params || Object.keys(params).length === 0) {
+      return 'default';
+    }
+    
+    const parts: string[] = [];
+    if (params.start_date) {
+      parts.push(`start:${params.start_date}`);
+    }
+    if (params.end_date) {
+      parts.push(`end:${params.end_date}`);
+    }
+    if (params.destination_categories && params.destination_categories.length > 0) {
+      parts.push(`cities:${params.destination_categories.sort().join(',')}`);
+    }
+    
+    return parts.join('|') || 'default';
+  };
+
+  const fetchData = useCallback(async (params?: AnalysisParams, forceRefresh: boolean = false) => {
+    const paramsKey = paramsToKey(params);
+    
+    if (isFetchingRef.current) {
+      console.log('[DataInsights] 请求正在进行中，跳过重复请求');
+      return;
+    }
+    
+    const currentData = analysisDataRef.current;
+    
+    if (!forceRefresh && paramsKey === lastParamsRef.current && currentData) {
+      console.log('[DataInsights] 参数未变化，跳过请求');
+      return;
+    }
+    
+    const cache = cacheRef.current;
+    const cached = cache.get(paramsKey);
+    const now = Date.now();
+    
+    if (!forceRefresh && cached && now - cached.timestamp < CACHE_TTL) {
+      console.log('[DataInsights] 使用缓存数据');
+      setAnalysisData(cached.data);
+      previousDataRef.current = cached.data;
+      const cities = cached.data.city_hotspots.map(h => h.name);
+      setAvailableCities(cities);
+      return;
+    }
+    
+    isFetchingRef.current = true;
+    lastParamsRef.current = paramsKey;
     setLoading(true);
     setErrorInfo(null);
 
     try {
-      if (analysisData) {
-        setPreviousData(analysisData);
+      console.log('[DataInsights] 发起新请求，参数:', params);
+      
+      if (currentData) {
+        previousDataRef.current = currentData;
       }
       
       const data = await getAnalysis(params);
+      
+      cache.set(paramsKey, {
+        params: paramsKey,
+        data: data,
+        timestamp: now
+      });
+      
       setAnalysisData(data);
-      setPreviousData(data);
+      previousDataRef.current = data;
       
       const cities = data.city_hotspots.map(h => h.name);
       setAvailableCities(cities);
@@ -120,18 +190,26 @@ const DataInsights: React.FC = () => {
     } catch (err) {
       const parsedError = parseError(err);
       setErrorInfo(parsedError);
-      
       console.error('[DataInsights] 数据加载失败:', parsedError);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
+  }, []);
+
+  useEffect(() => {
+    analysisDataRef.current = analysisData;
   }, [analysisData]);
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    
+    return () => {
+      isFetchingRef.current = false;
+    };
+  }, []);
 
-  const handleFilterChange = () => {
+  const handleFilterChange = useCallback(() => {
     const params: AnalysisParams = {};
     if (startDate) {
       params.start_date = startDate;
@@ -142,17 +220,18 @@ const DataInsights: React.FC = () => {
     if (selectedCities.length > 0) {
       params.destination_categories = selectedCities;
     }
-    fetchData(params);
-  };
+    fetchData(params, true);
+  }, [startDate, endDate, selectedCities, fetchData]);
 
-  const handleResetFilters = () => {
+  const handleResetFilters = useCallback(() => {
     setStartDate('');
     setEndDate('');
     setSelectedCities([]);
-    fetchData();
-  };
+    lastParamsRef.current = null;
+    fetchData(undefined, true);
+  }, [fetchData]);
 
-  const handleCityToggle = (city: string) => {
+  const handleCityToggle = useCallback((city: string) => {
     setSelectedCities(prev => {
       if (prev.includes(city)) {
         return prev.filter(c => c !== city);
@@ -160,9 +239,9 @@ const DataInsights: React.FC = () => {
         return [...prev, city];
       }
     });
-  };
+  }, []);
 
-  const getHotspotChartOption = (data: AnalysisResponse): EChartsOption => {
+  const getHotspotChartOption = useCallback((data: AnalysisResponse): EChartsOption => {
     if (!data || data.city_hotspots.length === 0) {
       return {};
     }
@@ -187,7 +266,7 @@ const DataInsights: React.FC = () => {
         },
         formatter: (params: any) => {
           const data = params[0];
-          const hotspot = analysisData?.city_hotspots.find(h => h.name === data.name);
+          const hotspot = data?.city_hotspots?.find((h: any) => h.name === data.name);
           if (hotspot) {
             return `
               <div style="font-weight: bold; margin-bottom: 8px;">${hotspot.name}</div>
@@ -241,9 +320,9 @@ const DataInsights: React.FC = () => {
         },
       ],
     };
-  };
+  }, []);
 
-  const getTrendChartOption = (data: AnalysisResponse): EChartsOption => {
+  const getTrendChartOption = useCallback((data: AnalysisResponse): EChartsOption => {
     if (!data || data.monthly_trends.length === 0) {
       return {};
     }
@@ -264,7 +343,7 @@ const DataInsights: React.FC = () => {
         trigger: 'axis',
         formatter: (params: any) => {
           const month = params[0].name;
-          const trend = analysisData?.monthly_trends.find(t => t.month === month);
+          const trend = data?.monthly_trends?.find((t: any) => t.month === month);
           if (trend) {
             return `
               <div style="font-weight: bold; margin-bottom: 8px;">${month}</div>
@@ -355,9 +434,20 @@ const DataInsights: React.FC = () => {
         },
       ],
     };
-  };
+  }, []);
 
-  const displayData = analysisData || previousData;
+  const displayData = analysisData || previousDataRef.current;
+
+  const hotspotOption = useMemo(() => {
+    return displayData ? getHotspotChartOption(displayData) : {};
+  }, [displayData, getHotspotChartOption]);
+
+  const trendOption = useMemo(() => {
+    return displayData ? getTrendChartOption(displayData) : {};
+  }, [displayData, getTrendChartOption]);
+
+  const hasHotspotData = displayData && displayData.city_hotspots.length > 0;
+  const hasTrendData = displayData && displayData.monthly_trends.length > 0;
 
   return (
     <div style={{ padding: '1rem' }}>
@@ -371,121 +461,6 @@ const DataInsights: React.FC = () => {
         <h2 style={{ margin: 0, marginBottom: '0.5rem' }}>📈 数据洞察</h2>
         <p style={{ margin: 0, opacity: 0.9 }}>智能数据可视化分析 - 实时联动筛选条件</p>
       </div>
-
-      {loading && (
-        <div style={{ 
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(255, 255, 255, 0.8)',
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          zIndex: 1000
-        }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ 
-              width: '50px', 
-              height: '50px', 
-              border: '4px solid #e5e7eb', 
-              borderTop: '4px solid #667eea', 
-              borderRadius: '50%', 
-              margin: '0 auto 1rem',
-              animation: 'spin 1s linear infinite'
-            }}></div>
-            <p style={{ color: '#6b7280', fontSize: '1rem' }}>加载数据分析中...</p>
-          </div>
-        </div>
-      )}
-
-      {errorInfo && (
-        <div style={{ 
-          background: '#fef2f2', 
-          border: '1px solid #fecaca',
-          borderRadius: '12px',
-          padding: '1.5rem',
-          marginBottom: '2rem'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-            <div style={{ fontSize: '2rem' }}>
-              {getErrorMessageIcon(errorInfo.type)}
-            </div>
-            <div style={{ flex: 1 }}>
-              <h3 style={{ margin: 0, marginBottom: '0.5rem', color: '#dc2626', fontSize: '1.1rem' }}>
-                数据加载失败
-              </h3>
-              <p style={{ margin: 0, color: '#6b7280', fontSize: '0.95rem' }}>
-                {errorInfo.message}
-              </p>
-              {errorInfo.detail && (
-                <p style={{ margin: '0.5rem 0 0 0', color: '#9ca3af', fontSize: '0.85rem' }}>
-                  详细信息: {errorInfo.detail}
-                </p>
-              )}
-            </div>
-          </div>
-          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem' }}>
-            {errorInfo.canRetry && (
-              <button
-                onClick={() => fetchData()}
-                style={{
-                  padding: '0.6rem 1.25rem',
-                  background: '#4f46e5',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '0.95rem',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#4338ca';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = '#4f46e5';
-                }}
-              >
-                🔄 重新加载
-              </button>
-            )}
-            {errorInfo.type === 'auth' && (
-              <button
-                onClick={() => {
-                  window.location.href = '/login';
-                }}
-                style={{
-                  padding: '0.6rem 1.25rem',
-                  background: 'white',
-                  color: '#374151',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  fontSize: '0.95rem',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                🔐 前往登录
-              </button>
-            )}
-          </div>
-          
-          {previousData && (
-            <div style={{ 
-              marginTop: '1.5rem', 
-              paddingTop: '1rem', 
-              borderTop: '1px solid #fecaca' 
-            }}>
-              <p style={{ margin: 0, marginBottom: '0.5rem', color: '#9ca3af', fontSize: '0.875rem' }}>
-                💡 正在显示最近一次成功加载的数据（可能已过期）
-              </p>
-            </div>
-          )}
-        </div>
-      )}
 
       <div style={{ 
         background: 'white',
@@ -510,12 +485,15 @@ const DataInsights: React.FC = () => {
               type="month"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
+              disabled={loading}
               style={{
                 width: '100%',
                 padding: '0.75rem',
                 border: '1px solid #d1d5db',
                 borderRadius: '8px',
-                fontSize: '1rem'
+                fontSize: '1rem',
+                backgroundColor: loading ? '#f3f4f6' : 'white',
+                cursor: loading ? 'not-allowed' : 'pointer'
               }}
             />
           </div>
@@ -528,12 +506,15 @@ const DataInsights: React.FC = () => {
               type="month"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
+              disabled={loading}
               style={{
                 width: '100%',
                 padding: '0.75rem',
                 border: '1px solid #d1d5db',
                 borderRadius: '8px',
-                fontSize: '1rem'
+                fontSize: '1rem',
+                backgroundColor: loading ? '#f3f4f6' : 'white',
+                cursor: loading ? 'not-allowed' : 'pointer'
               }}
             />
           </div>
@@ -549,16 +530,18 @@ const DataInsights: React.FC = () => {
                 <button
                   key={city}
                   onClick={() => handleCityToggle(city)}
+                  disabled={loading}
                   style={{
                     padding: '0.5rem 1rem',
                     borderRadius: '9999px',
                     border: '1px solid #d1d5db',
                     background: selectedCities.includes(city) ? '#4f46e5' : 'white',
                     color: selectedCities.includes(city) ? 'white' : '#374151',
-                    cursor: 'pointer',
+                    cursor: loading ? 'not-allowed' : 'pointer',
                     fontSize: '0.875rem',
                     fontWeight: 500,
-                    transition: 'all 0.2s'
+                    transition: 'all 0.2s',
+                    opacity: loading ? 0.6 : 1
                   }}
                 >
                   {city}
@@ -621,7 +604,97 @@ const DataInsights: React.FC = () => {
         </div>
       </div>
 
-      {displayData && (
+      {errorInfo && (
+        <div style={{ 
+          background: '#fef2f2', 
+          border: '1px solid #fecaca',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          marginBottom: '2rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+            <div style={{ fontSize: '2rem' }}>
+              {getErrorMessageIcon(errorInfo.type)}
+            </div>
+            <div style={{ flex: 1 }}>
+              <h3 style={{ margin: 0, marginBottom: '0.5rem', color: '#dc2626', fontSize: '1.1rem' }}>
+                数据加载失败
+              </h3>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: '0.95rem' }}>
+                {errorInfo.message}
+              </p>
+              {errorInfo.detail && (
+                <p style={{ margin: '0.5rem 0 0 0', color: '#9ca3af', fontSize: '0.85rem' }}>
+                  详细信息: {errorInfo.detail}
+                </p>
+              )}
+            </div>
+          </div>
+          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem' }}>
+            {errorInfo.canRetry && (
+              <button
+                onClick={() => {
+                  lastParamsRef.current = null;
+                  fetchData(undefined, true);
+                }}
+                style={{
+                  padding: '0.6rem 1.25rem',
+                  background: '#4f46e5',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.95rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#4338ca';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#4f46e5';
+                }}
+              >
+                🔄 重新加载
+              </button>
+            )}
+            {errorInfo.type === 'auth' && (
+              <button
+                onClick={() => {
+                  window.location.href = '/login';
+                }}
+                style={{
+                  padding: '0.6rem 1.25rem',
+                  background: 'white',
+                  color: '#374151',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontSize: '0.95rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                🔐 前往登录
+              </button>
+            )}
+          </div>
+          
+          {previousDataRef.current && (
+            <div style={{ 
+              marginTop: '1.5rem', 
+              paddingTop: '1rem', 
+              borderTop: '1px solid #fecaca' 
+            }}>
+              <p style={{ margin: 0, marginBottom: '0.5rem', color: '#9ca3af', fontSize: '0.875rem' }}>
+                💡 正在显示最近一次成功加载的数据（可能已过期）
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {displayData && !loading && (
         <div style={{ 
           background: 'white',
           borderRadius: '12px',
@@ -670,7 +743,109 @@ const DataInsights: React.FC = () => {
         </div>
       )}
 
-      {displayData ? (
+      {loading ? (
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: '1fr',
+          gap: '2rem'
+        }}>
+          <div style={{ 
+            background: 'white',
+            borderRadius: '12px',
+            padding: '1.5rem',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ 
+                width: '200px', 
+                height: '20px', 
+                background: '#f3f4f6', 
+                borderRadius: '4px',
+                animation: 'pulse 1.5s ease-in-out infinite'
+              }}></div>
+              <div style={{ 
+                width: '300px', 
+                height: '14px', 
+                background: '#f3f4f6', 
+                borderRadius: '4px',
+                marginTop: '0.5rem',
+                animation: 'pulse 1.5s ease-in-out infinite',
+                animationDelay: '0.2s'
+              }}></div>
+            </div>
+            <div style={{ 
+              height: '400px', 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center',
+              background: 'linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)',
+              backgroundSize: '200% 100%',
+              animation: 'shimmer 1.5s infinite'
+            }}>
+              <div style={{ textAlign: 'center', color: '#9ca3af' }}>
+                <div style={{ 
+                  width: '40px', 
+                  height: '40px', 
+                  border: '3px solid #e5e7eb', 
+                  borderTop: '3px solid #667eea', 
+                  borderRadius: '50%', 
+                  margin: '0 auto 1rem',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
+                <p>加载图表数据中...</p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ 
+            background: 'white',
+            borderRadius: '12px',
+            padding: '1.5rem',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ 
+                width: '200px', 
+                height: '20px', 
+                background: '#f3f4f6', 
+                borderRadius: '4px',
+                animation: 'pulse 1.5s ease-in-out infinite'
+              }}></div>
+              <div style={{ 
+                width: '300px', 
+                height: '14px', 
+                background: '#f3f4f6', 
+                borderRadius: '4px',
+                marginTop: '0.5rem',
+                animation: 'pulse 1.5s ease-in-out infinite',
+                animationDelay: '0.2s'
+              }}></div>
+            </div>
+            <div style={{ 
+              height: '400px', 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center',
+              background: 'linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)',
+              backgroundSize: '200% 100%',
+              animation: 'shimmer 1.5s infinite'
+            }}>
+              <div style={{ textAlign: 'center', color: '#9ca3af' }}>
+                <div style={{ 
+                  width: '40px', 
+                  height: '40px', 
+                  border: '3px solid #e5e7eb', 
+                  borderTop: '3px solid #667eea', 
+                  borderRadius: '50%', 
+                  margin: '0 auto 1rem',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
+                <p>加载图表数据中...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : displayData ? (
         <div style={{ 
           display: 'grid', 
           gridTemplateColumns: '1fr',
@@ -691,9 +866,9 @@ const DataInsights: React.FC = () => {
               </div>
             </div>
             
-            {displayData.city_hotspots.length > 0 ? (
+            {hasHotspotData ? (
               <ReactECharts
-                option={getHotspotChartOption(displayData)}
+                option={hotspotOption}
                 style={{ height: '400px', width: '100%' }}
                 opts={{ renderer: 'canvas' }}
                 notMerge={true}
@@ -726,9 +901,9 @@ const DataInsights: React.FC = () => {
               </div>
             </div>
             
-            {displayData.monthly_trends.length > 0 ? (
+            {hasTrendData ? (
               <ReactECharts
-                option={getTrendChartOption(displayData)}
+                option={trendOption}
                 style={{ height: '400px', width: '100%' }}
                 opts={{ renderer: 'canvas' }}
                 notMerge={true}
@@ -746,7 +921,7 @@ const DataInsights: React.FC = () => {
             )}
           </div>
         </div>
-      ) : !loading && !errorInfo ? (
+      ) : !errorInfo ? (
         <div style={{ 
           background: 'white',
           borderRadius: '12px',
@@ -759,6 +934,21 @@ const DataInsights: React.FC = () => {
           <p style={{ margin: 0, color: '#6b7280' }}>目前还没有行程数据，无法生成数据洞察分析</p>
         </div>
       ) : null}
+
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
     </div>
   );
 };
