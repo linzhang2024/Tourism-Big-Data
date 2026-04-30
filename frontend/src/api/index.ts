@@ -179,3 +179,60 @@ export async function getAnalysis(params?: AnalysisParams): Promise<AnalysisResp
   
   return response.data;
 }
+
+export interface ExportParams extends AnalysisParams {
+  format: 'json' | 'csv';
+}
+
+export async function exportStats(params: ExportParams): Promise<Blob> {
+  console.log('[API] 调用 exportStats，参数:', params);
+  
+  const url = new URL(`${API_BASE_URL}/stats/export`);
+  
+  url.searchParams.append('format', params.format);
+  
+  if (params.start_date) {
+    url.searchParams.append('start_date', params.start_date);
+  }
+  if (params.end_date) {
+    url.searchParams.append('end_date', params.end_date);
+  }
+  if (params.destination_categories && params.destination_categories.length > 0) {
+    params.destination_categories.forEach(cat => {
+      url.searchParams.append('destination_categories', cat);
+    });
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+    },
+    credentials: 'same-origin',
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: '导出失败' }));
+    throw new Error(errorData.detail || '导出失败');
+  }
+
+  const blob = await response.blob();
+  console.log('[API] exportStats 成功，文件大小:', blob.size);
+  
+  return blob;
+}
+
+export function downloadFile(blob: Blob, filename: string): void {
+  console.log('[API] 开始下载文件:', filename);
+  
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+  
+  console.log('[API] 文件下载完成');
+}

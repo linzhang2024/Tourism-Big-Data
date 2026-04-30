@@ -1,5 +1,8 @@
 import logging
-from typing import List, Dict, Any, Optional
+import json
+import csv
+import io
+from typing import List, Dict, Any, Optional, Generator
 from collections import defaultdict
 from datetime import datetime
 from copy import deepcopy
@@ -254,6 +257,116 @@ class StatsService:
         
         logger.info(f"[统计服务] 数据分析完成: 汇总={summary}")
         return response
+
+    def get_export_data(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        destination_categories: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        logger.info(f"[统计服务] 准备导出数据: start_date={start_date}, end_date={end_date}, categories={destination_categories}")
+        
+        analysis_data = self.get_analysis_data(
+            start_date=start_date,
+            end_date=end_date,
+            destination_categories=destination_categories
+        )
+        
+        export_data = {
+            "generated_at": analysis_data.generated_at.isoformat() if analysis_data.generated_at else None,
+            "period": analysis_data.period,
+            "summary": analysis_data.summary,
+            "city_hotspots": [
+                {
+                    "name": h.name,
+                    "count": h.count,
+                    "avg_budget": h.avg_budget,
+                    "total_spending": h.total_spending
+                }
+                for h in analysis_data.city_hotspots
+            ],
+            "monthly_trends": [
+                {
+                    "month": t.month,
+                    "total_itineraries": t.total_itineraries,
+                    "total_spending": t.total_spending,
+                    "avg_budget": t.avg_budget
+                }
+                for t in analysis_data.monthly_trends
+            ]
+        }
+        
+        logger.info(f"[统计服务] 导出数据准备完成: 汇总={export_data['summary']}")
+        return export_data
+
+    def export_to_json(self, export_data: Dict[str, Any]) -> str:
+        logger.info("[统计服务] 导出为JSON格式")
+        json_str = json.dumps(export_data, ensure_ascii=False, indent=2, default=str)
+        return json_str.encode('utf-8')
+
+    def export_to_csv(self, export_data: Dict[str, Any]) -> bytes:
+        logger.info("[统计服务] 导出为CSV格式")
+        
+        output = io.StringIO()
+        output.write('\ufeff')
+        
+        writer = csv.writer(output)
+        
+        writer.writerow(["行程数据导出报表"])
+        writer.writerow(["生成时间", export_data.get("generated_at", "")])
+        writer.writerow([])
+        
+        writer.writerow(["一、数据汇总"])
+        summary = export_data.get("summary", {})
+        writer.writerow(["指标", "数值"])
+        writer.writerow(["总行程数", summary.get("total_itineraries", 0)])
+        writer.writerow(["总消费金额", summary.get("total_spending", 0)])
+        writer.writerow(["总预算金额", summary.get("total_budget", 0)])
+        writer.writerow(["平均每行程消费", summary.get("avg_spending_per_itinerary", 0)])
+        writer.writerow(["涉及城市数", summary.get("total_cities", 0)])
+        writer.writerow(["最热门城市", summary.get("top_city", "")])
+        writer.writerow(["热门城市行程数", summary.get("top_city_count", 0)])
+        writer.writerow([])
+        
+        writer.writerow(["二、城市热度分布"])
+        writer.writerow(["城市名称", "行程数量", "平均预算", "总消费金额"])
+        for hotspot in export_data.get("city_hotspots", []):
+            writer.writerow([
+                hotspot.get("name", ""),
+                hotspot.get("count", 0),
+                hotspot.get("avg_budget", 0),
+                hotspot.get("total_spending", 0)
+            ])
+        writer.writerow([])
+        
+        writer.writerow(["三、月度趋势"])
+        writer.writerow(["月份", "行程总数", "总消费金额", "平均预算"])
+        for trend in export_data.get("monthly_trends", []):
+            writer.writerow([
+                trend.get("month", ""),
+                trend.get("total_itineraries", 0),
+                trend.get("total_spending", 0),
+                trend.get("avg_budget", 0)
+            ])
+        
+        csv_content = output.getvalue()
+        return csv_content.encode('utf-8')
+
+    def stream_export_data(
+        self,
+        export_data: Dict[str, Any],
+        format_type: str
+    ) -> Generator[bytes, None, None]:
+        logger.info(f"[统计服务] 流式导出数据，格式: {format_type}")
+        
+        if format_type == "json":
+            json_bytes = self.export_to_json(export_data)
+            yield json_bytes
+        elif format_type == "csv":
+            csv_bytes = self.export_to_csv(export_data)
+            yield csv_bytes
+        else:
+            raise ValueError(f"不支持的导出格式: {format_type}")
 
 
 stats_service = StatsService()
