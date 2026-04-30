@@ -144,23 +144,36 @@ export interface AnalysisParams {
 export async function getAnalysis(params?: AnalysisParams): Promise<AnalysisResponse> {
   console.log('[API] 调用 getAnalysis，参数:', params);
   
-  const url = new URL(`${API_BASE_URL}/stats/analysis`);
+  let queryParams: Record<string, string | string[]> = {};
   
   if (params) {
     if (params.start_date) {
-      url.searchParams.append('start_date', params.start_date);
+      queryParams['start_date'] = params.start_date;
     }
     if (params.end_date) {
-      url.searchParams.append('end_date', params.end_date);
+      queryParams['end_date'] = params.end_date;
     }
     if (params.destination_categories && params.destination_categories.length > 0) {
-      params.destination_categories.forEach(city => {
-        url.searchParams.append('destination_categories', city);
-      });
+      queryParams['destination_categories'] = params.destination_categories;
     }
   }
 
-  const response = await apiAxios.get<AnalysisResponse>(url.toString());
+  const response = await apiAxios.get<AnalysisResponse>('/stats/analysis', {
+    params: queryParams,
+    paramsSerializer: (params) => {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          value.forEach(item => {
+            searchParams.append(key, item);
+          });
+        } else if (value !== undefined && value !== null) {
+          searchParams.append(key, value);
+        }
+      });
+      return searchParams.toString();
+    }
+  });
 
   console.log('[API] getAnalysis 成功:', response.data);
   
