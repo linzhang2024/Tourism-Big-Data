@@ -7,7 +7,7 @@ import os
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from app.services.stats_service import stats_service
 from app.models.permission import PermissionCode
@@ -291,3 +291,109 @@ class TestExportFileIntegrity:
             csv_bytes.decode('utf-8')
         except UnicodeDecodeError as e:
             pytest.fail(f"编码错误: {e}")
+    
+    def test_csv_utf8_bom_header(self):
+        """测试CSV文件是否带有UTF-8 BOM头，确保Excel打开不乱码"""
+        from app.services.itinerary_service import itinerary_service
+        from app.models.itinerary import ItineraryCreate, InterestPreference
+        
+        original_count = len(itinerary_service.get_all_itineraries())
+        
+        itinerary_create = ItineraryCreate(
+            title="中文测试行程",
+            departure="北京",
+            destination="上海",
+            days=3,
+            budget=1000.0,
+            estimated_total_cost=900.0,
+            daily_plans=[],
+            tips=[],
+            interests=[InterestPreference.CULTURE],
+            is_ai_generated=True
+        )
+        itinerary_service.create_itinerary(itinerary_create, user_id=1)
+        
+        try:
+            export_data = stats_service.get_export_data()
+            
+            csv_bytes = stats_service.export_to_csv(export_data)
+            
+            UTF8_BOM = b'\xef\xbb\xbf'
+            
+            assert csv_bytes.startswith(UTF8_BOM), (
+                f"CSV文件必须以UTF-8 BOM头开头，以确保Excel正确显示中文字符。\n"
+                f"实际前10字节: {csv_bytes[:10]!r}\n"
+                f"期望BOM头: {UTF8_BOM!r}"
+            )
+            
+            print("[OK] CSV文件正确包含UTF-8 BOM头:", repr(csv_bytes[:3]))
+            
+            content_without_bom = csv_bytes.lstrip(UTF8_BOM)
+            content_str = content_without_bom.decode('utf-8')
+            
+            assert "中文测试行程" in content_str or "北京" in content_str or "上海" in content_str, (
+                f"CSV文件应包含中文字符。内容片段: {content_str[:200]}"
+            )
+            
+            print("[OK] CSV文件包含中文字符，编码正确")
+            
+        finally:
+            all_itineraries = itinerary_service.get_all_itineraries()
+            if len(all_itineraries) > original_count:
+                itinerary_service.delete_itinerary(all_itineraries[-1].id)
+    
+    def test_csv_bom_compatibility_with_excel(self):
+        """测试CSV BOM头确保Excel兼容性"""
+        from app.services.itinerary_service import itinerary_service
+        from app.models.itinerary import ItineraryCreate, InterestPreference
+        
+        original_count = len(itinerary_service.get_all_itineraries())
+        
+        for i in range(3):
+            itinerary_create = ItineraryCreate(
+                title=f"测试行程_{i+1}",
+                departure="北京",
+                destination=["上海", "杭州", "成都"][i],
+                days=3,
+                budget=1000.0 + i * 100,
+                estimated_total_cost=900.0 + i * 100,
+                daily_plans=[],
+                tips=[],
+                interests=[InterestPreference.CULTURE],
+                is_ai_generated=True
+            )
+            itinerary_service.create_itinerary(itinerary_create, user_id=1)
+        
+        try:
+            export_data = stats_service.get_export_data()
+            
+            csv_bytes = stats_service.export_to_csv(export_data)
+            
+            UTF8_BOM = b'\xef\xbb\xbf'
+            
+            assert csv_bytes.startswith(UTF8_BOM), "CSV缺少UTF-8 BOM头"
+            
+            content_without_bom = csv_bytes[len(UTF8_BOM):]
+            
+            try:
+                content_str = content_without_bom.decode('utf-8')
+                print("[OK] 成功以UTF-8解码CSV内容（去除BOM后）")
+            except UnicodeDecodeError:
+                pytest.fail("CSV内容（去除BOM后）无法以UTF-8解码")
+            
+            assert "总行程数" in content_str, "CSV应包含'总行程数'标题"
+            assert "上海" in content_str or "杭州" in content_str or "成都" in content_str, "CSV应包含目的地城市名"
+            
+            reader = csv.reader(io.StringIO(content_str))
+            rows = list(reader)
+            
+            assert len(rows) > 0, "CSV应包含数据行"
+            
+            print("[OK] CSV包含", len(rows), "行数据")
+            print("[OK] 验证完成：CSV文件带有UTF-8 BOM头，可在Excel中正确显示中文字符")
+            
+        finally:
+            for _ in range(3):
+                all_itineraries = itinerary_service.get_all_itineraries()
+                if len(all_itineraries) > original_count:
+                    itinerary_service.delete_itinerary(all_itineraries[-1].id)
