@@ -1,8 +1,10 @@
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, List
 from datetime import datetime
+from enum import Enum
 
 from app.models.stats import StatsResponse, BasicStats, DetailedStats, AdminStats, AnalysisResponse
 from app.models.permission import PermissionCode
@@ -155,3 +157,70 @@ async def get_analysis(
     logger.info(f"[统计 API] 成功返回数据分析给用户 '{username}'")
     
     return analysis_data
+
+
+class ExportFormat(str, Enum):
+    JSON = "json"
+    CSV = "csv"
+
+
+@router.get("/export")
+async def export_stats(
+    user_info: dict = Depends(get_current_user_permissions),
+    format: ExportFormat = Query(ExportFormat.JSON, description="导出格式：json 或 csv"),
+    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM"),
+    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM"),
+    destination_categories: Optional[List[str]] = Query(None, description="目的地类别筛选列表")
+):
+    username = user_info["username"]
+    role_code = user_info["role_code"]
+    permissions = user_info["permissions"]
+    
+    logger.info(f"[统计 API] 用户 '{username}' (角色: {role_code}) 请求导出数据")
+    logger.info(f"[统计 API] 参数: format={format.value}, start_date={start_date}, end_date={end_date}, categories={destination_categories}")
+    
+    has_data_export = PermissionCode.DATA_EXPORT in permissions
+    has_sys_manage = PermissionCode.SYS_MANAGE in permissions
+    
+    if not (has_data_export or has_sys_manage):
+        logger.warning(f"[统计 API] 用户 '{username}' 没有数据导出的权限")
+        raise HTTPException(
+            status_code=403,
+            detail="您没有数据导出的权限，需要 data:export 权限"
+        )
+    
+    export_data = stats_service.get_export_data(
+        start_date=start_date,
+        end_date=end_date,
+        destination_categories=destination_categories
+    )
+    
+    now = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    if format == ExportFormat.JSON:
+        filename = f"itinerary_stats_{now}.json"
+        media_type = "application/json"
+    else:
+        filename = f"itinerary_stats_{now}.csv"
+        media_type = "text/csv; charset=utf-8"
+    
+    logger.info(f"[统计 API] 准备导出文件: {filename}")
+    
+    def iter_content():
+        for chunk in stats_service.stream_export_data(export_data, format.value):
+            yield chunk
+    
+    response = StreamingResponse(
+        iter_content(),
+        media_type=media_type
+    )
+    
+    encoded_filename = filename.encode('utf-8').decode('latin-1')
+    response.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{encoded_filename}"
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    
+    logger.info(f"[统计 API] 成功返回导出数据给用户 '{username}'")
+    
+    return response

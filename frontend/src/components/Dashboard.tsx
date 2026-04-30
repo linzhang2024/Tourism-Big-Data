@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getStats } from '../api';
+import { getStats, exportStats, downloadFile, AnalysisParams } from '../api';
 import { StatsResponse } from '../types';
 
 const Dashboard: React.FC = () => {
@@ -8,6 +8,19 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  
+  const availableDestinations = [
+    '北京', '上海', '杭州', '成都', '西安',
+    '重庆', '广州', '深圳', '苏州', '南京',
+    '武汉', '长沙', '青岛', '大连', '厦门'
+  ];
+  
+  const [selectedDestinations, setSelectedDestinations] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -53,7 +66,66 @@ const Dashboard: React.FC = () => {
 
   const handleExportReport = () => {
     console.log('[Dashboard] 点击导出报表按钮');
-    alert('导出报表功能：只有拥有 data:export 权限的用户才能看到此按钮并执行此操作！');
+    setShowExportModal(true);
+  };
+
+  const handleDestinationToggle = (destination: string) => {
+    setSelectedDestinations(prev => {
+      if (prev.includes(destination)) {
+        return prev.filter(d => d !== destination);
+      } else {
+        return [...prev, destination];
+      }
+    });
+  };
+
+  const handleExportSubmit = async () => {
+    console.log('[Dashboard] 开始导出报表，格式:', exportFormat);
+    setExporting(true);
+    setError(null);
+
+    try {
+      const params: AnalysisParams & { format: 'json' | 'csv' } = {
+        format: exportFormat
+      };
+
+      if (startDate) {
+        params.start_date = startDate;
+      }
+      if (endDate) {
+        params.end_date = endDate;
+      }
+      if (selectedDestinations.length > 0) {
+        params.destination_categories = selectedDestinations;
+      }
+
+      console.log('[Dashboard] 导出参数:', params);
+
+      const blob = await exportStats(params);
+      
+      const now = new Date();
+      const timestamp = now.getFullYear().toString() +
+        (now.getMonth() + 1).toString().padStart(2, '0') +
+        now.getDate().toString().padStart(2, '0') + '_' +
+        now.getHours().toString().padStart(2, '0') +
+        now.getMinutes().toString().padStart(2, '0') +
+        now.getSeconds().toString().padStart(2, '0');
+      
+      const filename = `itinerary_stats_${timestamp}.${exportFormat}`;
+      
+      downloadFile(blob, filename);
+      
+      setShowExportModal(false);
+      alert('导出成功！文件已开始下载。');
+      
+    } catch (err) {
+      console.error('[Dashboard] 导出失败:', err);
+      const errorMessage = err instanceof Error ? err.message : '导出失败';
+      setError(errorMessage);
+      alert(`导出失败: ${errorMessage}`);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleRunSpider = () => {
@@ -438,6 +510,249 @@ const Dashboard: React.FC = () => {
           </ul>
         </div>
       </div>
+
+      {showExportModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowExportModal(false);
+            }
+          }}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              maxWidth: '500px',
+              width: '90%',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+          >
+            <h3 style={{ margin: 0, marginBottom: '1.5rem', color: '#1f2937' }}>
+              📥 导出报表
+            </h3>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ marginBottom: '0.5rem', color: '#374151', fontWeight: 500 }}>
+                导出格式:
+              </div>
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    cursor: 'pointer',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    background: exportFormat === 'json' ? '#dbeafe' : '#f3f4f6',
+                    border: exportFormat === 'json' ? '2px solid #3b82f6' : '2px solid transparent'
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="exportFormat"
+                    value="json"
+                    checked={exportFormat === 'json'}
+                    onChange={() => setExportFormat('json')}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <span>JSON</span>
+                </label>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    cursor: 'pointer',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    background: exportFormat === 'csv' ? '#dbeafe' : '#f3f4f6',
+                    border: exportFormat === 'csv' ? '2px solid #3b82f6' : '2px solid transparent'
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="exportFormat"
+                    value="csv"
+                    checked={exportFormat === 'csv'}
+                    onChange={() => setExportFormat('csv')}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <span>CSV (Excel可打开)</span>
+                </label>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ marginBottom: '0.5rem', color: '#374151', fontWeight: 500 }}>
+                日期筛选 (可选，格式: YYYY-MM):
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>
+                    开始日期
+                  </div>
+                  <input
+                    type="month"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '1rem'
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>
+                    结束日期
+                  </div>
+                  <input
+                    type="month"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '1rem'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ marginBottom: '0.5rem', color: '#374151', fontWeight: 500 }}>
+                目的地筛选 (可选，不选则导出全部):
+              </div>
+              <div style={{ 
+                display: 'flex', 
+                flexWrap: 'wrap', 
+                gap: '0.5rem',
+                maxHeight: '150px',
+                overflowY: 'auto',
+                padding: '0.5rem',
+                background: '#f9fafb',
+                borderRadius: '8px'
+              }}>
+                {availableDestinations.map((dest) => (
+                  <label
+                    key={dest}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.25rem',
+                      cursor: 'pointer',
+                      padding: '0.375rem 0.75rem',
+                      borderRadius: '6px',
+                      background: selectedDestinations.includes(dest) ? '#dbeafe' : 'white',
+                      border: selectedDestinations.includes(dest) ? '1px solid #3b82f6' : '1px solid #e5e7eb',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedDestinations.includes(dest)}
+                      onChange={() => handleDestinationToggle(dest)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span>{dest}</span>
+                  </label>
+                ))}
+              </div>
+              {selectedDestinations.length > 0 && (
+                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
+                  已选择 {selectedDestinations.length} 个目的地
+                </div>
+              )}
+            </div>
+
+            {error && (
+              <div style={{
+                padding: '0.75rem 1rem',
+                background: '#fee2e2',
+                color: '#dc2626',
+                borderRadius: '8px',
+                marginBottom: '1rem',
+                fontSize: '0.875rem'
+              }}>
+                {error}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowExportModal(false);
+                  setError(null);
+                }}
+                disabled={exporting}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: '#e5e7eb',
+                  color: '#374151',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: 500,
+                  cursor: exporting ? 'not-allowed' : 'pointer',
+                  opacity: exporting ? 0.6 : 1
+                }}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleExportSubmit}
+                disabled={exporting}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: exporting ? 'not-allowed' : 'pointer',
+                  opacity: exporting ? 0.6 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                {exporting ? (
+                  <>
+                    <span style={{ animation: 'spin 1s linear infinite' }}>⏳</span>
+                    导出中...
+                  </>
+                ) : (
+                  <>
+                    📥 确认导出
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
