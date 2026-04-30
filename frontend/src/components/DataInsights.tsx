@@ -4,32 +4,128 @@ import { EChartsOption } from 'echarts';
 import { AnalysisResponse, CityHotspot, MonthlyTrend } from '../types';
 import { getAnalysis, AnalysisParams } from '../api';
 
+type ErrorType = 'network' | 'auth' | 'forbidden' | 'not_found' | 'server' | 'unknown';
+
+interface ErrorInfo {
+  message: string;
+  type: ErrorType;
+  canRetry: boolean;
+  detail?: string;
+}
+
 const DataInsights: React.FC = () => {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [errorInfo, setErrorInfo] = useState<ErrorInfo | null>(null);
   const [analysisData, setAnalysisData] = useState<AnalysisResponse | null>(null);
   
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [availableCities, setAvailableCities] = useState<string[]>([]);
+  const [previousData, setPreviousData] = useState<AnalysisResponse | null>(null);
+
+  const parseError = (err: unknown): ErrorInfo => {
+    console.error('[DataInsights] 请求错误:', err);
+    
+    if (err instanceof Error) {
+      const error = err as any;
+      
+      if (error.message === '登录已过期') {
+        return {
+          message: '登录已过期，请重新登录',
+          type: 'auth',
+          canRetry: false
+        };
+      }
+      
+      if (error.status === 403 || error.message?.includes('被拒绝') || error.message?.includes('权限')) {
+        return {
+          message: '您没有访问数据分析的权限',
+          type: 'forbidden',
+          canRetry: false,
+          detail: error.message
+        };
+      }
+      
+      if (error.status === 404 || error.message?.includes('不存在')) {
+        return {
+          message: '请求的资源不存在',
+          type: 'not_found',
+          canRetry: false
+        };
+      }
+      
+      if (error.status && error.status >= 500) {
+        return {
+          message: '服务器错误，请稍后重试',
+          type: 'server',
+          canRetry: true,
+          detail: error.message
+        };
+      }
+      
+      if (error.message?.includes('NetworkError') || 
+          error.message?.includes('网络') || 
+          !error.status) {
+        return {
+          message: '网络连接失败，请检查网络后重试',
+          type: 'network',
+          canRetry: true,
+          detail: error.message
+        };
+      }
+      
+      return {
+        message: error.message || '数据加载失败',
+        type: 'unknown',
+        canRetry: true
+      };
+    }
+    
+    return {
+      message: '数据加载失败，请稍后重试',
+      type: 'unknown',
+      canRetry: true
+    };
+  };
+
+  const getErrorMessageIcon = (type: ErrorType): string => {
+    switch (type) {
+      case 'network': return '🌐';
+      case 'auth': return '🔐';
+      case 'forbidden': return '🚫';
+      case 'not_found': return '🔍';
+      case 'server': return '⚙️';
+      default: return '⚠️';
+    }
+  };
 
   const fetchData = useCallback(async (params?: AnalysisParams) => {
     setLoading(true);
-    setError(null);
+    setErrorInfo(null);
 
     try {
+      if (analysisData) {
+        setPreviousData(analysisData);
+      }
+      
       const data = await getAnalysis(params);
       setAnalysisData(data);
+      setPreviousData(data);
       
       const cities = data.city_hotspots.map(h => h.name);
       setAvailableCities(cities);
+      
+      console.log('[DataInsights] 数据加载成功');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取数据分析失败');
+      const parsedError = parseError(err);
+      setErrorInfo(parsedError);
+      
+      console.error('[DataInsights] 数据加载失败:', parsedError);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [analysisData]);
 
   useEffect(() => {
     fetchData();
@@ -66,12 +162,12 @@ const DataInsights: React.FC = () => {
     });
   };
 
-  const getHotspotChartOption = (): EChartsOption => {
-    if (!analysisData || analysisData.city_hotspots.length === 0) {
+  const getHotspotChartOption = (data: AnalysisResponse): EChartsOption => {
+    if (!data || data.city_hotspots.length === 0) {
       return {};
     }
 
-    const hotspots = [...analysisData.city_hotspots].sort((a, b) => b.count - a.count);
+    const hotspots = [...data.city_hotspots].sort((a, b) => b.count - a.count);
     const topHotspots = hotspots.slice(0, 10);
 
     return {
@@ -91,7 +187,7 @@ const DataInsights: React.FC = () => {
         },
         formatter: (params: any) => {
           const data = params[0];
-          const hotspot = analysisData.city_hotspots.find(h => h.name === data.name);
+          const hotspot = analysisData?.city_hotspots.find(h => h.name === data.name);
           if (hotspot) {
             return `
               <div style="font-weight: bold; margin-bottom: 8px;">${hotspot.name}</div>
@@ -147,12 +243,12 @@ const DataInsights: React.FC = () => {
     };
   };
 
-  const getTrendChartOption = (): EChartsOption => {
-    if (!analysisData || analysisData.monthly_trends.length === 0) {
+  const getTrendChartOption = (data: AnalysisResponse): EChartsOption => {
+    if (!data || data.monthly_trends.length === 0) {
       return {};
     }
 
-    const trends = [...analysisData.monthly_trends].sort((a, b) => a.month.localeCompare(b.month));
+    const trends = [...data.monthly_trends].sort((a, b) => a.month.localeCompare(b.month));
 
     return {
       title: {
@@ -168,7 +264,7 @@ const DataInsights: React.FC = () => {
         trigger: 'axis',
         formatter: (params: any) => {
           const month = params[0].name;
-          const trend = analysisData.monthly_trends.find(t => t.month === month);
+          const trend = analysisData?.monthly_trends.find(t => t.month === month);
           if (trend) {
             return `
               <div style="font-weight: bold; margin-bottom: 8px;">${month}</div>
@@ -261,62 +357,7 @@ const DataInsights: React.FC = () => {
     };
   };
 
-  if (loading) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        minHeight: '60vh',
-        fontSize: '1.25rem',
-        color: '#6b7280'
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ 
-            width: '50px', 
-            height: '50px', 
-            border: '4px solid #e5e7eb', 
-            borderTop: '4px solid #667eea', 
-            borderRadius: '50%', 
-            margin: '0 auto 1rem',
-            animation: 'spin 1s linear infinite'
-          }}></div>
-          <p>加载数据分析中...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <div style={{ 
-          background: '#fee2e2', 
-          color: '#dc2626', 
-          padding: '1rem', 
-          borderRadius: '8px',
-          marginBottom: '1rem'
-        }}>
-          错误: {error}
-        </div>
-        <button 
-          onClick={() => fetchData()}
-          style={{
-            padding: '0.75rem 1.5rem',
-            background: '#667eea',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '1rem',
-            fontWeight: 600
-          }}
-        >
-          重新加载
-        </button>
-      </div>
-    );
-  }
+  const displayData = analysisData || previousData;
 
   return (
     <div style={{ padding: '1rem' }}>
@@ -330,6 +371,121 @@ const DataInsights: React.FC = () => {
         <h2 style={{ margin: 0, marginBottom: '0.5rem' }}>📈 数据洞察</h2>
         <p style={{ margin: 0, opacity: 0.9 }}>智能数据可视化分析 - 实时联动筛选条件</p>
       </div>
+
+      {loading && (
+        <div style={{ 
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(255, 255, 255, 0.8)',
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          zIndex: 1000
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ 
+              width: '50px', 
+              height: '50px', 
+              border: '4px solid #e5e7eb', 
+              borderTop: '4px solid #667eea', 
+              borderRadius: '50%', 
+              margin: '0 auto 1rem',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <p style={{ color: '#6b7280', fontSize: '1rem' }}>加载数据分析中...</p>
+          </div>
+        </div>
+      )}
+
+      {errorInfo && (
+        <div style={{ 
+          background: '#fef2f2', 
+          border: '1px solid #fecaca',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          marginBottom: '2rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+            <div style={{ fontSize: '2rem' }}>
+              {getErrorMessageIcon(errorInfo.type)}
+            </div>
+            <div style={{ flex: 1 }}>
+              <h3 style={{ margin: 0, marginBottom: '0.5rem', color: '#dc2626', fontSize: '1.1rem' }}>
+                数据加载失败
+              </h3>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: '0.95rem' }}>
+                {errorInfo.message}
+              </p>
+              {errorInfo.detail && (
+                <p style={{ margin: '0.5rem 0 0 0', color: '#9ca3af', fontSize: '0.85rem' }}>
+                  详细信息: {errorInfo.detail}
+                </p>
+              )}
+            </div>
+          </div>
+          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem' }}>
+            {errorInfo.canRetry && (
+              <button
+                onClick={() => fetchData()}
+                style={{
+                  padding: '0.6rem 1.25rem',
+                  background: '#4f46e5',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.95rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#4338ca';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#4f46e5';
+                }}
+              >
+                🔄 重新加载
+              </button>
+            )}
+            {errorInfo.type === 'auth' && (
+              <button
+                onClick={() => {
+                  window.location.href = '/login';
+                }}
+                style={{
+                  padding: '0.6rem 1.25rem',
+                  background: 'white',
+                  color: '#374151',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontSize: '0.95rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                🔐 前往登录
+              </button>
+            )}
+          </div>
+          
+          {previousData && (
+            <div style={{ 
+              marginTop: '1.5rem', 
+              paddingTop: '1rem', 
+              borderTop: '1px solid #fecaca' 
+            }}>
+              <p style={{ margin: 0, marginBottom: '0.5rem', color: '#9ca3af', fontSize: '0.875rem' }}>
+                💡 正在显示最近一次成功加载的数据（可能已过期）
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ 
         background: 'white',
@@ -415,6 +571,7 @@ const DataInsights: React.FC = () => {
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button
             onClick={handleFilterChange}
+            disabled={loading}
             style={{
               padding: '0.75rem 1.5rem',
               background: '#4f46e5',
@@ -423,14 +580,15 @@ const DataInsights: React.FC = () => {
               borderRadius: '8px',
               fontSize: '1rem',
               fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s'
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+              opacity: loading ? 0.6 : 1
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#4338ca';
+              if (!loading) e.currentTarget.style.background = '#4338ca';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#4f46e5';
+              if (!loading) e.currentTarget.style.background = '#4f46e5';
             }}
           >
             🔄 应用筛选
@@ -438,6 +596,7 @@ const DataInsights: React.FC = () => {
           
           <button
             onClick={handleResetFilters}
+            disabled={loading}
             style={{
               padding: '0.75rem 1.5rem',
               background: 'white',
@@ -446,14 +605,15 @@ const DataInsights: React.FC = () => {
               borderRadius: '8px',
               fontSize: '1rem',
               fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s'
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+              opacity: loading ? 0.6 : 1
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#f3f4f6';
+              if (!loading) e.currentTarget.style.background = '#f3f4f6';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'white';
+              if (!loading) e.currentTarget.style.background = 'white';
             }}
           >
             🔙 重置
@@ -461,7 +621,7 @@ const DataInsights: React.FC = () => {
         </div>
       </div>
 
-      {analysisData && (
+      {displayData && (
         <div style={{ 
           background: 'white',
           borderRadius: '12px',
@@ -473,118 +633,132 @@ const DataInsights: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
             <div style={{ background: '#eff6ff', padding: '1.5rem', borderRadius: '8px', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🗺️</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#1d4ed8' }}>{analysisData.summary.total_itineraries}</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#1d4ed8' }}>{displayData.summary.total_itineraries}</div>
               <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>总行程数</div>
             </div>
             
             <div style={{ background: '#d1fae5', padding: '1.5rem', borderRadius: '8px', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>💰</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#065f46' }}>¥{analysisData.summary.total_spending.toFixed(2)}</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#065f46' }}>¥{displayData.summary.total_spending.toFixed(2)}</div>
               <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>总消费金额</div>
             </div>
             
             <div style={{ background: '#fef3c7', padding: '1.5rem', borderRadius: '8px', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📈</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#92400e' }}>¥{analysisData.summary.avg_spending_per_itinerary.toFixed(2)}</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#92400e' }}>¥{displayData.summary.avg_spending_per_itinerary.toFixed(2)}</div>
               <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>平均消费/行程</div>
             </div>
             
             <div style={{ background: '#fce7f3', padding: '1.5rem', borderRadius: '8px', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🏙️</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#9d174d' }}>{analysisData.summary.total_cities}</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#9d174d' }}>{displayData.summary.total_cities}</div>
               <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>覆盖城市数</div>
             </div>
             
             <div style={{ background: '#e0e7ff', padding: '1.5rem', borderRadius: '8px', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🏆</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#3730a3' }}>{analysisData.summary.top_city || '-'}</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#3730a3' }}>{displayData.summary.top_city || '-'}</div>
               <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>最热门城市</div>
             </div>
             
             <div style={{ background: '#f0f9ff', padding: '1.5rem', borderRadius: '8px', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📊</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#075985' }}>{analysisData.summary.top_city_count}</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#075985' }}>{displayData.summary.top_city_count}</div>
               <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>热门城市行程数</div>
             </div>
           </div>
         </div>
       )}
 
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: '1fr',
-        gap: '2rem'
-      }}>
+      {displayData ? (
         <div style={{ 
-          background: 'white',
-          borderRadius: '12px',
-          padding: '1.5rem',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          display: 'grid', 
+          gridTemplateColumns: '1fr',
+          gap: '2rem'
         }}>
-          <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h3 style={{ margin: 0, color: '#374151' }}>🏙️ 热门目的地分布</h3>
-              <p style={{ margin: 0, marginTop: '0.25rem', fontSize: '0.875rem', color: '#6b7280' }}>
-                柱状图展示各城市的行程数量分布
-              </p>
+          <div style={{ 
+            background: 'white',
+            borderRadius: '12px',
+            padding: '1.5rem',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#374151' }}>🏙️ 热门目的地分布</h3>
+                <p style={{ margin: 0, marginTop: '0.25rem', fontSize: '0.875rem', color: '#6b7280' }}>
+                  柱状图展示各城市的行程数量分布
+                </p>
+              </div>
             </div>
+            
+            {displayData.city_hotspots.length > 0 ? (
+              <ReactECharts
+                option={getHotspotChartOption(displayData)}
+                style={{ height: '400px', width: '100%' }}
+                opts={{ renderer: 'canvas' }}
+                notMerge={true}
+              />
+            ) : (
+              <div style={{ 
+                height: '400px', 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                color: '#6b7280'
+              }}>
+                暂无热门目的地数据
+              </div>
+            )}
           </div>
-          
-          {analysisData && analysisData.city_hotspots.length > 0 ? (
-            <ReactECharts
-              option={getHotspotChartOption()}
-              style={{ height: '400px', width: '100%' }}
-              opts={{ renderer: 'canvas' }}
-              notMerge={true}
-            />
-          ) : (
-            <div style={{ 
-              height: '400px', 
-              display: 'flex', 
-              justifyContent: 'center', 
-              alignItems: 'center',
-              color: '#6b7280'
-            }}>
-              暂无热门目的地数据
-            </div>
-          )}
-        </div>
 
+          <div style={{ 
+            background: 'white',
+            borderRadius: '12px',
+            padding: '1.5rem',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#374151' }}>📉 月度消费趋势</h3>
+                <p style={{ margin: 0, marginTop: '0.25rem', fontSize: '0.875rem', color: '#6b7280' }}>
+                  折线图展示各月的总消费金额和平均预算走势
+                </p>
+              </div>
+            </div>
+            
+            {displayData.monthly_trends.length > 0 ? (
+              <ReactECharts
+                option={getTrendChartOption(displayData)}
+                style={{ height: '400px', width: '100%' }}
+                opts={{ renderer: 'canvas' }}
+                notMerge={true}
+              />
+            ) : (
+              <div style={{ 
+                height: '400px', 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                color: '#6b7280'
+              }}>
+                暂无月度趋势数据
+              </div>
+            )}
+          </div>
+        </div>
+      ) : !loading && !errorInfo ? (
         <div style={{ 
           background: 'white',
           borderRadius: '12px',
-          padding: '1.5rem',
+          padding: '3rem',
+          textAlign: 'center',
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
         }}>
-          <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h3 style={{ margin: 0, color: '#374151' }}>📉 月度消费趋势</h3>
-              <p style={{ margin: 0, marginTop: '0.25rem', fontSize: '0.875rem', color: '#6b7280' }}>
-                折线图展示各月的总消费金额和平均预算走势
-              </p>
-            </div>
-          </div>
-          
-          {analysisData && analysisData.monthly_trends.length > 0 ? (
-            <ReactECharts
-              option={getTrendChartOption()}
-              style={{ height: '400px', width: '100%' }}
-              opts={{ renderer: 'canvas' }}
-              notMerge={true}
-            />
-          ) : (
-            <div style={{ 
-              height: '400px', 
-              display: 'flex', 
-              justifyContent: 'center', 
-              alignItems: 'center',
-              color: '#6b7280'
-            }}>
-              暂无月度趋势数据
-            </div>
-          )}
+          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>📊</div>
+          <h3 style={{ margin: 0, marginBottom: '0.5rem', color: '#374151' }}>暂无数据</h3>
+          <p style={{ margin: 0, color: '#6b7280' }}>目前还没有行程数据，无法生成数据洞察分析</p>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 };
