@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota, User } from '../types';
-import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota, getPendingUsers, approveUser, rejectUser } from '../api';
+import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota, getPendingUsers, getRejectedUsers, approveUser, rejectUser } from '../api';
 import { useTenant } from '../contexts/TenantContext';
 
-type TabType = 'tenants' | 'pending';
+type TabType = 'tenants' | 'pending' | 'rejected';
 
 export const TenantManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('tenants');
@@ -14,6 +14,9 @@ export const TenantManagement: React.FC = () => {
   
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
+  
+  const [rejectedUsers, setRejectedUsers] = useState<User[]>([]);
+  const [loadingRejected, setLoadingRejected] = useState(false);
   
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -63,6 +66,18 @@ export const TenantManagement: React.FC = () => {
     }
   };
 
+  const fetchRejectedUsers = async () => {
+    setLoadingRejected(true);
+    try {
+      const data = await getRejectedUsers();
+      setRejectedUsers(data);
+    } catch (err) {
+      console.error('[TenantManagement] 获取已驳回用户失败:', err);
+    } finally {
+      setLoadingRejected(false);
+    }
+  };
+
   useEffect(() => {
     fetchTenants();
   }, []);
@@ -70,6 +85,8 @@ export const TenantManagement: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'pending') {
       fetchPendingUsers();
+    } else if (activeTab === 'rejected') {
+      fetchRejectedUsers();
     }
   }, [activeTab]);
 
@@ -348,6 +365,38 @@ export const TenantManagement: React.FC = () => {
               </span>
             )}
           </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange('rejected')}
+            style={{
+              padding: '0.75rem 1.5rem',
+              border: 'none',
+              background: 'none',
+              fontSize: '0.95rem',
+              fontWeight: activeTab === 'rejected' ? 600 : 400,
+              color: activeTab === 'rejected' ? '#667eea' : '#6b7280',
+              borderBottom: activeTab === 'rejected' ? '2px solid #667eea' : '2px solid transparent',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            ❌ 已驳回
+            {rejectedUsers.length > 0 && (
+              <span style={{
+                background: '#ef4444',
+                color: 'white',
+                fontSize: '0.75rem',
+                padding: '2px 8px',
+                borderRadius: '9999px',
+                fontWeight: 600
+              }}>
+                {rejectedUsers.length}
+              </span>
+            )}
+          </button>
         </div>
 
         {error && (
@@ -539,7 +588,7 @@ export const TenantManagement: React.FC = () => {
               </div>
             )}
           </div>
-        ) : (
+        ) : activeTab === 'pending' ? (
           <div>
             {loadingPending ? (
               <div className="loading">加载待审核用户中...</div>
@@ -560,7 +609,7 @@ export const TenantManagement: React.FC = () => {
                     {pendingUsers.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="empty-row">
-                          🎉 暂无待审核用户
+                          暂无待审核用户
                         </td>
                       </tr>
                     ) : (
@@ -646,6 +695,92 @@ export const TenantManagement: React.FC = () => {
                                 ✗ 驳回
                               </button>
                             </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>
+            {loadingRejected ? (
+              <div className="loading">加载已驳回用户中...</div>
+            ) : (
+              <div className="table-container">
+                <table className="tenant-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>用户名</th>
+                      <th>邮箱</th>
+                      <th>目标租户</th>
+                      <th>申请时间</th>
+                      <th>状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rejectedUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="empty-row">
+                          暂无已驳回用户
+                        </td>
+                      </tr>
+                    ) : (
+                      rejectedUsers.map(user => (
+                        <tr key={user.id}>
+                          <td>{user.id}</td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <div style={{
+                                width: '32px',
+                                height: '32px',
+                                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'white',
+                                fontWeight: 700,
+                                fontSize: '0.9rem'
+                              }}>
+                                {user.username.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 600 }}>{user.username}</div>
+                                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                  角色: 普通用户
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{user.email || '-'}</td>
+                          <td>
+                            <span style={{
+                              background: '#fee2e2',
+                              color: '#991b1b',
+                              padding: '4px 12px',
+                              borderRadius: '9999px',
+                              fontSize: '0.875rem',
+                              fontWeight: 500
+                            }}>
+                              {getTenantName(user.tenant_id)}
+                            </span>
+                          </td>
+                          <td className="date-cell">{formatDate(user.created_at)}</td>
+                          <td>
+                            <span style={{
+                              background: '#fee2e2',
+                              color: '#991b1b',
+                              padding: '4px 12px',
+                              borderRadius: '9999px',
+                              fontSize: '0.875rem',
+                              fontWeight: 500
+                            }}>
+                              ❌ 已驳回
+                            </span>
                           </td>
                         </tr>
                       ))

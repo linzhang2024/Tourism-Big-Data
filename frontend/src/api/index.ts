@@ -327,6 +327,13 @@ export async function getPendingUsers(): Promise<User[]> {
   return response.data;
 }
 
+export async function getRejectedUsers(): Promise<User[]> {
+  console.log('[API] 调用 getRejectedUsers');
+  const response = await apiAxios.get<User[]>('/auth/rejected');
+  console.log('[API] getRejectedUsers 成功:', response.data);
+  return response.data;
+}
+
 export async function approveUser(userId: number): Promise<User> {
   console.log('[API] 调用 approveUser:', userId);
   const response = await apiAxios.post<User>(`/auth/approve/${userId}`);

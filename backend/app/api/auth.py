@@ -262,6 +262,25 @@ async def get_pending_users(
     return pending_users
 
 
+@router.get("/rejected", response_model=List[UserResponse])
+async def get_rejected_users(
+    current_user: UserResponse = Depends(get_current_user_dependency)
+):
+    logger.info(f"[认证 API] 用户 '{current_user.username}' 请求获取已驳回用户列表")
+    
+    if 'sys:manage' not in current_user.permissions:
+        logger.warning(f"[认证 API] 用户 '{current_user.username}' 无权限访问已驳回列表")
+        raise HTTPException(
+            status_code=403,
+            detail="无权限访问已驳回用户列表"
+        )
+    
+    rejected_users = user_service.get_rejected_users()
+    logger.info(f"[认证 API] 获取到 {len(rejected_users)} 个已驳回用户")
+    
+    return rejected_users
+
+
 @router.post("/approve/{user_id}", response_model=UserResponse)
 async def approve_user(
     user_id: int,
