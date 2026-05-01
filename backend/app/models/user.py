@@ -1,6 +1,13 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
+from enum import Enum
+
+
+class UserStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    PENDING = "PENDING"
+    REJECTED = "REJECTED"
 
 
 class UserBase(BaseModel):
@@ -8,6 +15,7 @@ class UserBase(BaseModel):
     email: Optional[str] = Field(None, description="用户邮箱")
     role_code: str = Field(default="USER", description="用户角色代码，如：ADMIN、USER")
     tenant_id: Optional[int] = Field(None, description="所属租户ID")
+    status: UserStatus = Field(default=UserStatus.ACTIVE, description="用户状态：ACTIVE(激活)、PENDING(待审核)、REJECTED(已拒绝)")
 
 
 class UserCreate(UserBase):

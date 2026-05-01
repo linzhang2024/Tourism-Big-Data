@@ -1,9 +1,10 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, List
+from pydantic import BaseModel, Field
 
-from app.models.user import LoginRequest, LoginResponse, UserResponse
+from app.models.user import LoginRequest, LoginResponse, UserResponse, UserCreate, UserStatus
 from app.services.user_service import user_service
 from app.services.role_service import role_service
 from app.utils.jwt_utils import jwt_utils
@@ -13,6 +14,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 security = HTTPBearer(auto_error=False)
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(..., description="用户名")
+    password: str = Field(..., description="密码")
+    email: Optional[str] = Field(None, description="邮箱")
+    tenant_id: int = Field(..., description="目标租户ID")
+
+
+class RejectRequest(BaseModel):
+    reason: Optional[str] = Field(None, description="驳回原因")
+
+
+class LoginErrorDetail(BaseModel):
+    detail: str
+    error_code: str
 
 
 def get_user_permissions(role_code: str) -> list:
@@ -128,10 +145,33 @@ def require_any_permission(required_permissions: List[str]):
 async def login(login_request: LoginRequest):
     logger.info(f"[认证 API] 收到登录请求: 用户名='{login_request.username}'")
     
+    db_user = user_service.get_user_by_username(login_request.username)
+    
+    if db_user and not user_service.verify_password(login_request.password, db_user.hashed_password):
+        logger.warning(f"[认证 API] 登录失败: 密码错误 - '{login_request.username}'")
+        raise HTTPException(
+            status_code=401,
+            detail="用户名或密码错误"
+        )
+    
+    if db_user and db_user.status == UserStatus.PENDING:
+        logger.warning(f"[认证 API] 登录失败: 用户 '{login_request.username}' 状态为待审核")
+        raise HTTPException(
+            status_code=403,
+            detail="您的账号正在审核中，请等待管理员审批"
+        )
+    
+    if db_user and db_user.status == UserStatus.REJECTED:
+        logger.warning(f"[认证 API] 登录失败: 用户 '{login_request.username}' 状态为已拒绝")
+        raise HTTPException(
+            status_code=403,
+            detail="您的账号申请已被拒绝，请联系管理员"
+        )
+    
     user = user_service.authenticate_user(login_request.username, login_request.password)
     
     if not user:
-        logger.warning(f"[认证 API] 登录失败: 用户名或密码错误 - '{login_request.username}'")
+        logger.warning(f"[认证 API] 登录失败: 用户名不存在 - '{login_request.username}'")
         raise HTTPException(
             status_code=401,
             detail="用户名或密码错误"
@@ -152,6 +192,7 @@ async def login(login_request: LoginRequest):
         email=user.email,
         role_code=user.role_code,
         tenant_id=user.tenant_id,
+        status=user.status,
         created_at=user.created_at,
         updated_at=user.updated_at,
         permissions=permissions
@@ -166,6 +207,114 @@ async def login(login_request: LoginRequest):
     logger.info(f"[认证 API] 返回登录响应: 用户ID={user.id}, 用户名={user.username}, 角色={user.role_code}, 租户ID={user.tenant_id}, 权限={permissions}")
     
     return response
+
+
+@router.post("/register", response_model=UserResponse, status_code=201)
+async def register(register_request: RegisterRequest):
+    logger.info(f"[认证 API] 收到注册请求: 用户名='{register_request.username}', 租户ID={register_request.tenant_id}")
+    
+    try:
+        user_create = UserCreate(
+            username=register_request.username,
+            password=register_request.password,
+            email=register_request.email,
+            tenant_id=register_request.tenant_id,
+            role_code="USER",
+            status=UserStatus.PENDING
+        )
+        
+        created_user = user_service.register_user(user_create)
+        
+        logger.info(f"[认证 API] 注册申请提交成功: 用户 '{created_user.username}', 状态='{created_user.status}'")
+        
+        return created_user
+        
+    except ValueError as e:
+        logger.warning(f"[认证 API] 注册失败: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"[认证 API] 注册过程中发生错误: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="注册失败，请稍后重试"
+        )
+
+
+@router.get("/pending", response_model=List[UserResponse])
+async def get_pending_users(
+    current_user: UserResponse = Depends(get_current_user_dependency)
+):
+    logger.info(f"[认证 API] 用户 '{current_user.username}' 请求获取待审核用户列表")
+    
+    if 'sys:manage' not in current_user.permissions:
+        logger.warning(f"[认证 API] 用户 '{current_user.username}' 无权限访问待审核列表")
+        raise HTTPException(
+            status_code=403,
+            detail="无权限访问待审核用户列表"
+        )
+    
+    pending_users = user_service.get_pending_users()
+    logger.info(f"[认证 API] 获取到 {len(pending_users)} 个待审核用户")
+    
+    return pending_users
+
+
+@router.post("/approve/{user_id}", response_model=UserResponse)
+async def approve_user(
+    user_id: int,
+    current_user: UserResponse = Depends(get_current_user_dependency)
+):
+    logger.info(f"[认证 API] 用户 '{current_user.username}' 尝试审批通过用户 ID={user_id}")
+    
+    if 'sys:manage' not in current_user.permissions:
+        logger.warning(f"[认证 API] 用户 '{current_user.username}' 无权限执行审批操作")
+        raise HTTPException(
+            status_code=403,
+            detail="无权限执行审批操作"
+        )
+    
+    approved_user = user_service.approve_user(user_id)
+    
+    if not approved_user:
+        logger.warning(f"[认证 API] 审批失败: 用户 ID={user_id} 不存在或状态不是待审核")
+        raise HTTPException(
+            status_code=400,
+            detail="用户不存在或状态不是待审核"
+        )
+    
+    logger.info(f"[认证 API] 用户 ID={user_id} 审批通过成功")
+    return approved_user
+
+
+@router.post("/reject/{user_id}")
+async def reject_user(
+    user_id: int,
+    reject_request: RejectRequest = Body(default=RejectRequest()),
+    current_user: UserResponse = Depends(get_current_user_dependency)
+):
+    logger.info(f"[认证 API] 用户 '{current_user.username}' 尝试驳回用户 ID={user_id}")
+    
+    if 'sys:manage' not in current_user.permissions:
+        logger.warning(f"[认证 API] 用户 '{current_user.username}' 无权限执行驳回操作")
+        raise HTTPException(
+            status_code=403,
+            detail="无权限执行驳回操作"
+        )
+    
+    success = user_service.reject_user(user_id, reject_request.reason)
+    
+    if not success:
+        logger.warning(f"[认证 API] 驳回失败: 用户 ID={user_id} 不存在或状态不是待审核")
+        raise HTTPException(
+            status_code=400,
+            detail="用户不存在或状态不是待审核"
+        )
+    
+    logger.info(f"[认证 API] 用户 ID={user_id} 驳回成功")
+    return {"detail": "用户已被驳回", "user_id": user_id}
 
 
 @router.get("/me", response_model=UserResponse)

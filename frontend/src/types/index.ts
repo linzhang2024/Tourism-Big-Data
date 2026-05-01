@@ -1,3 +1,5 @@
+export type UserStatus = 'ACTIVE' | 'PENDING' | 'REJECTED';
+
 export type InterestPreference = 'culture' | 'nature' | 'food' | 'shopping' | 'adventure' | 'relaxation';
 
 export interface TrendModel {
@@ -114,9 +116,22 @@ export interface User {
   username: string;
   email?: string;
   role_code: string;
+  tenant_id?: number;
+  status: UserStatus;
   created_at: string;
   updated_at?: string;
   permissions: string[];
+}
+
+export interface RegisterRequest {
+  username: string;
+  password: string;
+  email?: string;
+  tenant_id: number;
+}
+
+export interface RejectRequest {
+  reason?: string;
 }
 
 export interface LoginRequest {
