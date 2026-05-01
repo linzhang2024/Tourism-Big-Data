@@ -129,6 +129,13 @@ class UserService:
             if user.status == UserStatus.PENDING
         ]
 
+    def get_rejected_users(self) -> List[UserResponse]:
+        return [
+            self._to_response(user)
+            for user in self.users
+            if user.status == UserStatus.REJECTED
+        ]
+
     def get_user_status(self, username: str) -> Optional[UserStatus]:
         user = self.get_user_by_username(username)
         if user:
