@@ -32,7 +32,7 @@ async def generate_and_save_itinerary(
     request: ItineraryRequest,
     current_user: UserResponse = Depends(require_permissions(["itinerary:create"]))
 ):
-    logger.info(f"[行程API] 用户 '{current_user.username}' (ID={current_user.id}) 请求AI生成并保存行程")
+    logger.info(f"[行程API] 用户 '{current_user.username}' (ID={current_user.id}, 租户ID={current_user.tenant_id}) 请求AI生成并保存行程")
     logger.info(f"[行程API] 参数: 目的地={request.destination}, 天数={request.days}, 出发地={request.departure}")
     if request.budget:
         logger.info(f"[行程API] 预算={request.budget} 元")
@@ -42,7 +42,7 @@ async def generate_and_save_itinerary(
     logger.info(f"[行程API] 开始模拟AI生成过程...")
     await asyncio.sleep(2)
     
-    saved = ai_itinerary_service.generate_and_save(request, current_user.id)
+    saved = ai_itinerary_service.generate_and_save(request, current_user.id, current_user.tenant_id)
     
     logger.info(f"[行程API] AI行程生成并保存成功: ID={saved.id}, 标题={saved.title}")
     return saved
@@ -52,16 +52,16 @@ async def generate_and_save_itinerary(
 async def get_all_itineraries(
     current_user: UserResponse = Depends(require_any_permission(["itinerary:view", "data:view"]))
 ):
-    logger.info(f"[行程API] 用户 '{current_user.username}' 获取所有行程列表")
-    return itinerary_service.get_all_itineraries()
+    logger.info(f"[行程API] 用户 '{current_user.username}' (租户ID={current_user.tenant_id}) 获取所有行程列表")
+    return itinerary_service.get_all_itineraries(current_user.tenant_id)
 
 
 @router.get("/my", response_model=List[ItineraryDetail])
 async def get_my_itineraries(
     current_user: UserResponse = Depends(require_any_permission(["itinerary:view", "data:view"]))
 ):
-    logger.info(f"[行程API] 用户 '{current_user.username}' 获取自己的行程列表")
-    return itinerary_service.get_itineraries_by_user(current_user.id)
+    logger.info(f"[行程API] 用户 '{current_user.username}' (租户ID={current_user.tenant_id}) 获取自己的行程列表")
+    return itinerary_service.get_itineraries_by_user(current_user.id, current_user.tenant_id)
 
 
 @router.get("/{itinerary_id}", response_model=ItineraryDetail)
@@ -69,8 +69,8 @@ async def get_itinerary(
     itinerary_id: int,
     current_user: UserResponse = Depends(require_any_permission(["itinerary:view", "data:view"]))
 ):
-    logger.info(f"[行程API] 用户 '{current_user.username}' 获取行程详情: ID={itinerary_id}")
-    itinerary = itinerary_service.get_itinerary_by_id(itinerary_id)
+    logger.info(f"[行程API] 用户 '{current_user.username}' (租户ID={current_user.tenant_id}) 获取行程详情: ID={itinerary_id}")
+    itinerary = itinerary_service.get_itinerary_by_id(itinerary_id, current_user.tenant_id)
     if itinerary is None:
         raise HTTPException(
             status_code=404,
@@ -84,8 +84,8 @@ async def create_itinerary(
     itinerary: ItineraryCreate,
     current_user: UserResponse = Depends(require_permissions(["itinerary:create"]))
 ):
-    logger.info(f"[行程API] 用户 '{current_user.username}' 创建新行程: 标题={itinerary.title}")
-    return itinerary_service.create_itinerary(itinerary, current_user.id)
+    logger.info(f"[行程API] 用户 '{current_user.username}' (租户ID={current_user.tenant_id}) 创建新行程: 标题={itinerary.title}")
+    return itinerary_service.create_itinerary(itinerary, current_user.id, current_user.tenant_id)
 
 
 @router.put("/{itinerary_id}", response_model=ItineraryDetail)
@@ -94,8 +94,8 @@ async def update_itinerary(
     itinerary: ItineraryUpdate,
     current_user: UserResponse = Depends(require_permissions(["itinerary:update"]))
 ):
-    logger.info(f"[行程API] 用户 '{current_user.username}' 更新行程: ID={itinerary_id}")
-    updated = itinerary_service.update_itinerary(itinerary_id, itinerary)
+    logger.info(f"[行程API] 用户 '{current_user.username}' (租户ID={current_user.tenant_id}) 更新行程: ID={itinerary_id}")
+    updated = itinerary_service.update_itinerary(itinerary_id, itinerary, current_user.tenant_id)
     if updated is None:
         raise HTTPException(
             status_code=404,
@@ -109,8 +109,8 @@ async def delete_itinerary(
     itinerary_id: int,
     current_user: UserResponse = Depends(require_permissions(["itinerary:delete"]))
 ):
-    logger.info(f"[行程API] 用户 '{current_user.username}' 删除行程: ID={itinerary_id}")
-    success = itinerary_service.delete_itinerary(itinerary_id)
+    logger.info(f"[行程API] 用户 '{current_user.username}' (租户ID={current_user.tenant_id}) 删除行程: ID={itinerary_id}")
+    success = itinerary_service.delete_itinerary(itinerary_id, current_user.tenant_id)
     if not success:
         raise HTTPException(
             status_code=404,

@@ -7,6 +7,7 @@ from app.models.user import LoginRequest, LoginResponse, UserResponse
 from app.services.user_service import user_service
 from app.services.role_service import role_service
 from app.utils.jwt_utils import jwt_utils
+from app.utils.tenant_context import tenant_context
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -24,6 +25,8 @@ def get_user_permissions(role_code: str) -> list:
 def get_current_user_dependency(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> UserResponse:
+    tenant_context.clear()
+    
     if not credentials:
         logger.warning("[权限校验] 未提供 Token")
         raise HTTPException(
@@ -50,6 +53,14 @@ def get_current_user_dependency(
             detail="用户不存在"
         )
     
+    tenant_id = user_info.get("tenant_id")
+    user_id = user_info.get("user_id")
+    
+    tenant_context.set_tenant_id(tenant_id)
+    tenant_context.set_user_id(user_id)
+    
+    logger.info(f"[权限校验] 设置租户上下文: tenant_id={tenant_id}, user_id={user_id}")
+    
     permissions = get_user_permissions(user.role_code)
     
     return UserResponse(
@@ -57,6 +68,7 @@ def get_current_user_dependency(
         username=user.username,
         email=user.email,
         role_code=user.role_code,
+        tenant_id=user.tenant_id,
         created_at=user.created_at,
         updated_at=user.updated_at,
         permissions=permissions
@@ -125,7 +137,7 @@ async def login(login_request: LoginRequest):
             detail="用户名或密码错误"
         )
     
-    logger.info(f"[认证 API] 登录成功: 用户 '{user.username}'，角色 '{user.role_code}'")
+    logger.info(f"[认证 API] 登录成功: 用户 '{user.username}'，角色 '{user.role_code}'，租户ID '{user.tenant_id}'")
     
     permissions = get_user_permissions(user.role_code)
     logger.info(f"[认证 API] 用户 '{user.username}' 的权限: {permissions}")
@@ -139,6 +151,7 @@ async def login(login_request: LoginRequest):
         username=user.username,
         email=user.email,
         role_code=user.role_code,
+        tenant_id=user.tenant_id,
         created_at=user.created_at,
         updated_at=user.updated_at,
         permissions=permissions
@@ -150,13 +163,15 @@ async def login(login_request: LoginRequest):
         user=user_with_permissions
     )
     
-    logger.info(f"[认证 API] 返回登录响应: 用户ID={user.id}, 用户名={user.username}, 角色={user.role_code}, 权限={permissions}")
+    logger.info(f"[认证 API] 返回登录响应: 用户ID={user.id}, 用户名={user.username}, 角色={user.role_code}, 租户ID={user.tenant_id}, 权限={permissions}")
     
     return response
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    tenant_context.clear()
+    
     if not credentials:
         logger.warning("[认证 API] 获取当前用户失败: 未提供 Token")
         raise HTTPException(
@@ -185,14 +200,21 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
             detail="用户不存在"
         )
     
+    tenant_id = user_info.get("tenant_id")
+    user_id = user_info.get("user_id")
+    tenant_context.set_tenant_id(tenant_id)
+    tenant_context.set_user_id(user_id)
+    logger.info(f"[认证 API] 设置租户上下文: tenant_id={tenant_id}, user_id={user_id}")
+    
     permissions = get_user_permissions(user.role_code)
-    logger.info(f"[认证 API] Token 验证成功: 用户 '{user.username}'，角色 '{user.role_code}'，权限: {permissions}")
+    logger.info(f"[认证 API] Token 验证成功: 用户 '{user.username}'，角色 '{user.role_code}'，租户ID '{user.tenant_id}'，权限: {permissions}")
     
     return UserResponse(
         id=user.id,
         username=user.username,
         email=user.email,
         role_code=user.role_code,
+        tenant_id=user.tenant_id,
         created_at=user.created_at,
         updated_at=user.updated_at,
         permissions=permissions

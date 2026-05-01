@@ -9,6 +9,7 @@ from enum import Enum
 from app.models.stats import StatsResponse, BasicStats, DetailedStats, AdminStats, AnalysisResponse
 from app.models.permission import PermissionCode
 from app.utils.jwt_utils import jwt_utils
+from app.utils.tenant_context import tenant_context
 from app.services.role_service import role_service
 from app.services.user_service import user_service
 from app.services.permission_service import permission_service
@@ -21,6 +22,8 @@ security = HTTPBearer(auto_error=False)
 
 
 def get_current_user_permissions(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
+    tenant_context.clear()
+    
     if not credentials:
         logger.warning("[统计 API] 访问被拒绝: 未提供 Token")
         raise HTTPException(
@@ -42,8 +45,14 @@ def get_current_user_permissions(credentials: Optional[HTTPAuthorizationCredenti
     
     username = user_info["username"]
     role_code = user_info["role"]
+    tenant_id = user_info.get("tenant_id")
+    user_id = user_info.get("user_id")
     
-    logger.info(f"[统计 API] Token 验证成功: 用户 '{username}'，角色 '{role_code}'")
+    tenant_context.set_tenant_id(tenant_id)
+    tenant_context.set_user_id(user_id)
+    logger.info(f"[统计 API] 设置租户上下文: tenant_id={tenant_id}, user_id={user_id}")
+    
+    logger.info(f"[统计 API] Token 验证成功: 用户 '{username}'，角色 '{role_code}'，租户ID '{tenant_id}'")
     
     role = role_service.get_role_by_code(role_code)
     if not role:
@@ -59,6 +68,8 @@ def get_current_user_permissions(credentials: Optional[HTTPAuthorizationCredenti
     return {
         "username": username,
         "role_code": role_code,
+        "tenant_id": tenant_id,
+        "user_id": user_id,
         "permissions": permissions
     }
 
@@ -83,8 +94,9 @@ async def get_stats(user_info: dict = Depends(get_current_user_permissions)):
     username = user_info["username"]
     role_code = user_info["role_code"]
     permissions = user_info["permissions"]
+    tenant_id = user_info.get("tenant_id")
     
-    logger.info(f"[统计 API] 用户 '{username}' (角色: {role_code}) 请求统计数据")
+    logger.info(f"[统计 API] 用户 '{username}' (角色: {role_code}, 租户ID: {tenant_id}) 请求统计数据")
     logger.info(f"[统计 API] 用户权限: {permissions}")
     
     access_level = determine_access_level(permissions)
@@ -133,8 +145,9 @@ async def get_analysis(
     username = user_info["username"]
     role_code = user_info["role_code"]
     permissions = user_info["permissions"]
+    tenant_id = user_info.get("tenant_id")
     
-    logger.info(f"[统计 API] 用户 '{username}' (角色: {role_code}) 请求数据分析")
+    logger.info(f"[统计 API] 用户 '{username}' (角色: {role_code}, 租户ID: {tenant_id}) 请求数据分析")
     logger.info(f"[统计 API] 参数: start_date={start_date}, end_date={end_date}, categories={destination_categories}")
     
     has_data_view = PermissionCode.DATA_VIEW in permissions
@@ -175,8 +188,9 @@ async def export_stats(
     username = user_info["username"]
     role_code = user_info["role_code"]
     permissions = user_info["permissions"]
+    tenant_id = user_info.get("tenant_id")
     
-    logger.info(f"[统计 API] 用户 '{username}' (角色: {role_code}) 请求导出数据")
+    logger.info(f"[统计 API] 用户 '{username}' (角色: {role_code}, 租户ID: {tenant_id}) 请求导出数据")
     logger.info(f"[统计 API] 参数: format={format.value}, start_date={start_date}, end_date={end_date}, categories={destination_categories}")
     
     has_data_export = PermissionCode.DATA_EXPORT in permissions

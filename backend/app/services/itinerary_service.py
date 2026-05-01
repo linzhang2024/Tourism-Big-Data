@@ -14,6 +14,7 @@ from app.models.itinerary import (
     InterestPreference
 )
 from app.utils.cache_manager import cache_manager
+from app.utils.tenant_context import tenant_context
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ CACHE_TTL = 60
 CACHE_KEY_ALL = "itinerary:all"
 CACHE_KEY_USER_PREFIX = "itinerary:user:"
 CACHE_KEY_DETAIL_PREFIX = "itinerary:detail:"
+CACHE_KEY_TENANT_PREFIX = "itinerary:tenant:"
 
 
 def generate_mock_itinerary(request: ItineraryRequest) -> ItineraryResponse:
@@ -116,18 +118,28 @@ class ItineraryService:
         self.itineraries: List[ItineraryDetail] = []
         self.next_id: int = 1
 
-    def _invalidate_cache(self, user_id: Optional[int] = None, itinerary_id: Optional[int] = None) -> None:
+    def _resolve_tenant_id(self, explicit_tenant_id: Optional[int]) -> Optional[int]:
+        if explicit_tenant_id is not None:
+            return explicit_tenant_id
+        return tenant_context.get_tenant_id()
+
+    def _invalidate_cache(self, user_id: Optional[int] = None, itinerary_id: Optional[int] = None, tenant_id: Optional[int] = None) -> None:
         cache_manager.delete(CACHE_KEY_ALL)
         if user_id is not None:
             cache_manager.delete(f"{CACHE_KEY_USER_PREFIX}{user_id}")
         if itinerary_id is not None:
             cache_manager.delete(f"{CACHE_KEY_DETAIL_PREFIX}{itinerary_id}")
+        if tenant_id is not None:
+            cache_manager.delete(f"{CACHE_KEY_TENANT_PREFIX}{tenant_id}")
         logger.info("[行程服务] 缓存已失效")
     
-    def create_itinerary(self, itinerary_create: ItineraryCreate, user_id: int) -> ItineraryDetail:
+    def create_itinerary(self, itinerary_create: ItineraryCreate, user_id: int, tenant_id: Optional[int] = None) -> ItineraryDetail:
+        resolved_tenant_id = self._resolve_tenant_id(tenant_id)
+        
         itinerary = ItineraryDetail(
             id=self.next_id,
             user_id=user_id,
+            tenant_id=resolved_tenant_id,
             title=itinerary_create.title,
             departure=itinerary_create.departure,
             destination=itinerary_create.destination,
@@ -144,30 +156,57 @@ class ItineraryService:
         )
         self.itineraries.append(itinerary)
         self.next_id += 1
-        self._invalidate_cache(user_id=user_id)
-        logger.info(f"[行程服务] 创建行程: ID={itinerary.id}, 标题={itinerary.title}, 用户ID={user_id}, AI生成={itinerary.is_ai_generated}")
+        self._invalidate_cache(user_id=user_id, tenant_id=resolved_tenant_id)
+        logger.info(f"[行程服务] 创建行程: ID={itinerary.id}, 标题={itinerary.title}, 用户ID={user_id}, 租户ID={resolved_tenant_id}, AI生成={itinerary.is_ai_generated}")
         return itinerary
     
-    def get_all_itineraries(self) -> List[ItineraryDetail]:
-        cached = cache_manager.get(CACHE_KEY_ALL)
+    def get_all_itineraries(self, tenant_id: Optional[int] = None) -> List[ItineraryDetail]:
+        current_tenant_id = self._resolve_tenant_id(tenant_id)
+        
+        if current_tenant_id is None:
+            logger.warning("[行程服务] 无租户上下文，返回空列表")
+            return []
+        
+        cache_key = f"{CACHE_KEY_TENANT_PREFIX}{current_tenant_id}"
+        cached = cache_manager.get(cache_key)
         if cached is not None:
-            logger.info(f"[行程服务] 缓存命中 - 获取所有行程列表，共 {len(cached)} 条")
+            logger.info(f"[行程服务] 缓存命中 - 获取租户 {current_tenant_id} 的行程列表，共 {len(cached)} 条")
             return cached
         
-        logger.info(f"[行程服务] 缓存未命中 - 从数据库获取所有行程列表，共 {len(self.itineraries)} 条")
+        tenant_itineraries = [it for it in self.itineraries if it.tenant_id == current_tenant_id]
+        logger.info(f"[行程服务] 缓存未命中 - 从数据库获取租户 {current_tenant_id} 的行程列表，共 {len(tenant_itineraries)} 条")
+        result = deepcopy(tenant_itineraries)
+        cache_manager.set(cache_key, result, ttl=CACHE_TTL)
+        return result
+
+    def get_all_itineraries_unsafe(self) -> List[ItineraryDetail]:
+        cached = cache_manager.get(CACHE_KEY_ALL)
+        if cached is not None:
+            logger.info(f"[行程服务] 缓存命中 - 获取所有行程列表（不安全），共 {len(cached)} 条")
+            return cached
+        
+        logger.info(f"[行程服务] 缓存未命中 - 从数据库获取所有行程列表（不安全），共 {len(self.itineraries)} 条")
         result = deepcopy(self.itineraries)
         cache_manager.set(CACHE_KEY_ALL, result, ttl=CACHE_TTL)
         return result
 
-    def get_itinerary_by_id(self, itinerary_id: int) -> Optional[ItineraryDetail]:
+    def get_itinerary_by_id(self, itinerary_id: int, tenant_id: Optional[int] = None) -> Optional[ItineraryDetail]:
+        current_tenant_id = self._resolve_tenant_id(tenant_id)
+        
         cache_key = f"{CACHE_KEY_DETAIL_PREFIX}{itinerary_id}"
         cached = cache_manager.get(cache_key)
         if cached is not None:
+            if current_tenant_id is not None and cached.tenant_id != current_tenant_id:
+                logger.warning(f"[行程服务] 租户 {current_tenant_id} 试图访问其他租户的行程: ID={itinerary_id}")
+                return None
             logger.info(f"[行程服务] 缓存命中 - 获取行程详情: ID={itinerary_id}")
             return cached
         
         for itinerary in self.itineraries:
             if itinerary.id == itinerary_id:
+                if current_tenant_id is not None and itinerary.tenant_id != current_tenant_id:
+                    logger.warning(f"[行程服务] 租户 {current_tenant_id} 试图访问其他租户的行程: ID={itinerary_id}")
+                    return None
                 logger.info(f"[行程服务] 缓存未命中 - 从数据库获取行程详情: ID={itinerary_id}")
                 result = deepcopy(itinerary)
                 cache_manager.set(cache_key, result, ttl=CACHE_TTL)
@@ -175,10 +214,31 @@ class ItineraryService:
         logger.warning(f"[行程服务] 行程不存在: ID={itinerary_id}")
         return None
 
-    def update_itinerary(self, itinerary_id: int, itinerary_update: ItineraryUpdate) -> Optional[ItineraryDetail]:
+    def get_itinerary_by_id_unsafe(self, itinerary_id: int) -> Optional[ItineraryDetail]:
+        cache_key = f"{CACHE_KEY_DETAIL_PREFIX}{itinerary_id}"
+        cached = cache_manager.get(cache_key)
+        if cached is not None:
+            logger.info(f"[行程服务] 缓存命中 - 获取行程详情（不安全）: ID={itinerary_id}")
+            return cached
+        
+        for itinerary in self.itineraries:
+            if itinerary.id == itinerary_id:
+                logger.info(f"[行程服务] 缓存未命中 - 从数据库获取行程详情（不安全）: ID={itinerary_id}")
+                result = deepcopy(itinerary)
+                cache_manager.set(cache_key, result, ttl=CACHE_TTL)
+                return result
+        logger.warning(f"[行程服务] 行程不存在: ID={itinerary_id}")
+        return None
+
+    def update_itinerary(self, itinerary_id: int, itinerary_update: ItineraryUpdate, tenant_id: Optional[int] = None) -> Optional[ItineraryDetail]:
+        current_tenant_id = self._resolve_tenant_id(tenant_id)
+        
         itinerary = None
         for it in self.itineraries:
             if it.id == itinerary_id:
+                if current_tenant_id is not None and it.tenant_id != current_tenant_id:
+                    logger.warning(f"[行程服务] 租户 {current_tenant_id} 试图更新其他租户的行程: ID={itinerary_id}")
+                    return None
                 itinerary = it
                 break
         
@@ -187,6 +247,7 @@ class ItineraryService:
             return None
         
         user_id = itinerary.user_id
+        tenant_id_from_it = itinerary.tenant_id
         update_data = itinerary_update.model_dump(exclude_unset=True)
         
         for key, value in update_data.items():
@@ -195,30 +256,44 @@ class ItineraryService:
             setattr(itinerary, key, value)
         
         itinerary.updated_at = datetime.now()
-        self._invalidate_cache(user_id=user_id, itinerary_id=itinerary_id)
+        self._invalidate_cache(user_id=user_id, itinerary_id=itinerary_id, tenant_id=tenant_id_from_it)
         logger.info(f"[行程服务] 更新行程: ID={itinerary_id}, 更新字段={list(update_data.keys())}")
         return itinerary
 
-    def delete_itinerary(self, itinerary_id: int) -> bool:
+    def delete_itinerary(self, itinerary_id: int, tenant_id: Optional[int] = None) -> bool:
+        current_tenant_id = self._resolve_tenant_id(tenant_id)
+        
         user_id: Optional[int] = None
+        tenant_id_from_it: Optional[int] = None
         for i, itinerary in enumerate(self.itineraries):
             if itinerary.id == itinerary_id:
+                if current_tenant_id is not None and itinerary.tenant_id != current_tenant_id:
+                    logger.warning(f"[行程服务] 租户 {current_tenant_id} 试图删除其他租户的行程: ID={itinerary_id}")
+                    return False
                 user_id = itinerary.user_id
+                tenant_id_from_it = itinerary.tenant_id
                 deleted = self.itineraries.pop(i)
-                self._invalidate_cache(user_id=user_id, itinerary_id=itinerary_id)
+                self._invalidate_cache(user_id=user_id, itinerary_id=itinerary_id, tenant_id=tenant_id_from_it)
                 logger.info(f"[行程服务] 删除行程: ID={itinerary_id}, 标题={deleted.title}")
                 return True
         logger.warning(f"[行程服务] 删除失败，行程不存在: ID={itinerary_id}")
         return False
 
-    def get_itineraries_by_user(self, user_id: int) -> List[ItineraryDetail]:
+    def get_itineraries_by_user(self, user_id: int, tenant_id: Optional[int] = None) -> List[ItineraryDetail]:
+        current_tenant_id = self._resolve_tenant_id(tenant_id)
+        
         cache_key = f"{CACHE_KEY_USER_PREFIX}{user_id}"
         cached = cache_manager.get(cache_key)
         if cached is not None:
+            if current_tenant_id is not None:
+                cached = [it for it in cached if it.tenant_id == current_tenant_id]
             logger.info(f"[行程服务] 缓存命中 - 获取用户行程列表: 用户ID={user_id}, 共 {len(cached)} 条")
             return cached
         
         user_itineraries = [it for it in self.itineraries if it.user_id == user_id]
+        if current_tenant_id is not None:
+            user_itineraries = [it for it in user_itineraries if it.tenant_id == current_tenant_id]
+        
         logger.info(f"[行程服务] 缓存未命中 - 从数据库获取用户行程列表: 用户ID={user_id}, 共 {len(user_itineraries)} 条")
         result = deepcopy(user_itineraries)
         cache_manager.set(cache_key, result, ttl=CACHE_TTL)
@@ -319,8 +394,8 @@ class AIItenaryService:
         logger.info(f"[AI服务] 行程生成完成: 标题={response.title}, 预估费用={response.estimated_total_cost}")
         return response
 
-    def generate_and_save(self, request: ItineraryRequest, user_id: int) -> ItineraryDetail:
-        logger.info(f"[AI服务] 开始生成并保存行程: 用户ID={user_id}, 目的地={request.destination}, 天数={request.days}")
+    def generate_and_save(self, request: ItineraryRequest, user_id: int, tenant_id: Optional[int] = None) -> ItineraryDetail:
+        logger.info(f"[AI服务] 开始生成并保存行程: 用户ID={user_id}, 租户ID={tenant_id}, 目的地={request.destination}, 天数={request.days}")
         
         generated = self.generate_itinerary(request)
         
@@ -338,7 +413,7 @@ class AIItenaryService:
             is_ai_generated=True
         )
         
-        saved = itinerary_service.create_itinerary(itinerary_create, user_id)
+        saved = itinerary_service.create_itinerary(itinerary_create, user_id, tenant_id)
         logger.info(f"[AI服务] 行程已保存到数据库: ID={saved.id}")
         
         return saved

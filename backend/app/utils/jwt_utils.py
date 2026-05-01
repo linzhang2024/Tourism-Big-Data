@@ -23,11 +23,12 @@ class JWTUtils:
             "sub": user.username,
             "user_id": user.id,
             "role": user.role_code,
+            "tenant_id": user.tenant_id,
             "exp": expire,
             "iat": datetime.utcnow()
         }
         
-        logger.info(f"[JWT 工具] 为用户 '{user.username}' 生成 Token，角色: {user.role_code}")
+        logger.info(f"[JWT 工具] 为用户 '{user.username}' 生成 Token，角色: {user.role_code}, 租户ID: {user.tenant_id}")
         logger.info(f"[JWT 工具] Token 负载: {to_encode}")
         
         encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -52,6 +53,7 @@ class JWTUtils:
         username: str = payload.get("sub")
         user_id: int = payload.get("user_id")
         role: str = payload.get("role")
+        tenant_id: Optional[int] = payload.get("tenant_id")
         
         if username is None or user_id is None or role is None:
             logger.error("[JWT 工具] Token 中缺少必要的用户信息")
@@ -60,7 +62,8 @@ class JWTUtils:
         return {
             "username": username,
             "user_id": user_id,
-            "role": role
+            "role": role,
+            "tenant_id": tenant_id
         }
 
     @staticmethod

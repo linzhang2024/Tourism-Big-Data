@@ -4,6 +4,7 @@ from datetime import datetime
 import bcrypt
 
 from app.models.user import UserCreate, UserResponse, UserInDB
+from app.utils.tenant_context import tenant_context
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class UserService:
             username=user_create.username,
             email=user_create.email,
             role_code=user_create.role_code,
+            tenant_id=user_create.tenant_id,
             hashed_password=hashed_password,
             created_at=datetime.now(),
             updated_at=None
@@ -40,13 +42,17 @@ class UserService:
         self.users.append(user_in_db)
         self.next_id += 1
         
-        logger.info(f"[用户服务] 创建用户: {user_in_db.username} (角色: {user_in_db.role_code})")
+        logger.info(f"[用户服务] 创建用户: {user_in_db.username} (角色: {user_in_db.role_code}, 租户ID: {user_in_db.tenant_id})")
         
+        return self._to_response(user_in_db)
+
+    def _to_response(self, user_in_db: UserInDB) -> UserResponse:
         return UserResponse(
             id=user_in_db.id,
             username=user_in_db.username,
             email=user_in_db.email,
             role_code=user_in_db.role_code,
+            tenant_id=user_in_db.tenant_id,
             created_at=user_in_db.created_at,
             updated_at=user_in_db.updated_at
         )
@@ -64,16 +70,14 @@ class UserService:
         return None
 
     def get_all_users(self) -> List[UserResponse]:
+        return [self._to_response(user) for user in self.users]
+
+    def get_users_by_tenant(self, tenant_id: int) -> List[UserResponse]:
+        logger.info(f"[用户服务] 获取租户 {tenant_id} 的所有用户")
         return [
-            UserResponse(
-                id=user.id,
-                username=user.username,
-                email=user.email,
-                role_code=user.role_code,
-                created_at=user.created_at,
-                updated_at=user.updated_at
-            )
-            for user in self.users
+            self._to_response(user) 
+            for user in self.users 
+            if user.tenant_id == tenant_id
         ]
 
     def authenticate_user(self, username: str, password: str) -> Optional[UserResponse]:
@@ -87,37 +91,60 @@ class UserService:
             logger.warning(f"[用户服务] 登录失败: 用户 '{username}' 密码错误")
             return None
         
-        logger.info(f"[用户服务] 用户 '{username}' 认证成功，角色: {user.role_code}")
+        logger.info(f"[用户服务] 用户 '{username}' 认证成功，角色: {user.role_code}, 租户ID: {user.tenant_id}")
         
-        return UserResponse(
-            id=user.id,
-            username=user.username,
-            email=user.email,
-            role_code=user.role_code,
-            created_at=user.created_at,
-            updated_at=user.updated_at
-        )
+        return self._to_response(user)
 
     def initialize_default_users(self):
+        from app.services.tenant_service import tenant_service
+        
+        tenant_service.initialize_default_tenants()
+        
+        tenant_a = tenant_service.get_tenant_by_code("TENANT_A")
+        tenant_b = tenant_service.get_tenant_by_code("TENANT_B")
+        
         default_users = [
             UserCreate(
                 username="admin",
                 password="admin123",
                 email="admin@tourism.com",
-                role_code="ADMIN"
+                role_code="ADMIN",
+                tenant_id=tenant_a.id if tenant_a else None
             ),
             UserCreate(
                 username="user",
                 password="user123",
                 email="user@tourism.com",
-                role_code="USER"
+                role_code="USER",
+                tenant_id=tenant_a.id if tenant_a else None
+            ),
+            UserCreate(
+                username="tenant_a_admin",
+                password="admin123",
+                email="admin_a@tourism.com",
+                role_code="ADMIN",
+                tenant_id=tenant_a.id if tenant_a else None
+            ),
+            UserCreate(
+                username="tenant_b_admin",
+                password="admin123",
+                email="admin_b@tourism.com",
+                role_code="ADMIN",
+                tenant_id=tenant_b.id if tenant_b else None
+            ),
+            UserCreate(
+                username="tenant_b_user",
+                password="user123",
+                email="user_b@tourism.com",
+                role_code="USER",
+                tenant_id=tenant_b.id if tenant_b else None
             )
         ]
         
         for user_create in default_users:
             if not self.get_user_by_username(user_create.username):
                 created_user = self.create_user(user_create)
-                logger.info(f"[用户初始化] 创建默认用户: {created_user.username} (角色: {created_user.role_code})")
+                logger.info(f"[用户初始化] 创建默认用户: {created_user.username} (角色: {created_user.role_code}, 租户ID: {created_user.tenant_id})")
             else:
                 logger.info(f"[用户初始化] 默认用户已存在: {user_create.username}")
 

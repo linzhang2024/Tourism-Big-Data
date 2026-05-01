@@ -7,6 +7,7 @@ class UserBase(BaseModel):
     username: str = Field(..., description="用户名，用于登录")
     email: Optional[str] = Field(None, description="用户邮箱")
     role_code: str = Field(default="USER", description="用户角色代码，如：ADMIN、USER")
+    tenant_id: Optional[int] = Field(None, description="所属租户ID")
 
 
 class UserCreate(UserBase):

@@ -80,6 +80,7 @@ class ItineraryDetail(BaseModel):
     
     id: int = Field(..., description="行程唯一ID")
     user_id: int = Field(..., description="创建用户ID")
+    tenant_id: Optional[int] = Field(None, description="所属租户ID")
     title: str = Field(..., description="行程标题")
     departure: str = Field(..., description="出发地")
     destination: str = Field(..., description="目的地")
