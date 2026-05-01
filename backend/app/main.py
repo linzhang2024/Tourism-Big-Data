@@ -9,9 +9,11 @@ from app.api.role import router as role_router
 from app.api.permission import router as permission_router
 from app.api.auth import router as auth_router
 from app.api.stats import router as stats_router
+from app.api.tenant import router as tenant_router
 from app.services.role_service import role_service
 from app.services.permission_service import permission_service
 from app.services.user_service import user_service
+from app.services.tenant_service import tenant_service
 from app.models.role import RoleCreate
 from app.models.permission import PermissionCreate, PermissionCode
 from app.utils.log_broadcaster import log_broadcaster, setup_websocket_logging
@@ -123,6 +125,7 @@ async def lifespan(app: FastAPI):
     initialize_permissions()
     initialize_role_permissions()
     user_service.initialize_default_users()
+    tenant_service.initialize_default_tenants()
     logger.info("[系统初始化] 系统初始化完成")
     yield
 
@@ -148,6 +151,7 @@ app.include_router(role_router, prefix="/api/roles", tags=["角色管理"])
 app.include_router(permission_router, prefix="/api/permissions", tags=["权限管理"])
 app.include_router(auth_router, prefix="/api/auth", tags=["认证"])
 app.include_router(stats_router, prefix="/api/stats", tags=["统计数据"])
+app.include_router(tenant_router, prefix="/api/tenants", tags=["租户管理"])
 
 
 @app.get("/")
