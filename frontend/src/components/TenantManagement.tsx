@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota } from '../types';
 import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota } from '../api';
+import { useTenant } from '../contexts/TenantContext';
 
 export const TenantManagement: React.FC = () => {
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -21,6 +22,8 @@ export const TenantManagement: React.FC = () => {
   const [editFormData, setEditFormData] = useState<TenantUpdate>({});
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const { currentTenant, refreshTenant } = useTenant();
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -97,7 +100,13 @@ export const TenantManagement: React.FC = () => {
     try {
       await updateTenant(selectedTenant.id, editFormData);
       setShowEditModal(false);
+      
       fetchTenants();
+      
+      if (currentTenant && selectedTenant.id === currentTenant.id) {
+        console.log('[TenantManagement] 检测到修改的是当前登录租户，刷新全局租户信息');
+        await refreshTenant();
+      }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : '更新租户失败');
     } finally {
@@ -159,6 +168,11 @@ export const TenantManagement: React.FC = () => {
       const updated = await getTenantById(selectedTenant.id);
       setSelectedTenant(updated);
       fetchTenants();
+      
+      if (currentTenant && selectedTenant.id === currentTenant.id) {
+        console.log('[TenantManagement] 检测到重置的是当前登录租户配额，刷新全局租户信息');
+        await refreshTenant();
+      }
     } catch (err) {
       console.error('重置配额失败:', err);
       alert('重置失败: ' + (err instanceof Error ? err.message : '未知错误'));
@@ -173,6 +187,10 @@ export const TenantManagement: React.FC = () => {
     if (percentage >= 90) return '#ef4444';
     if (percentage >= 70) return '#f59e0b';
     return '#10b981';
+  };
+
+  const isCurrentTenant = (tenant: Tenant) => {
+    return currentTenant && tenant.id === currentTenant.id;
   };
 
   return (
@@ -221,8 +239,29 @@ export const TenantManagement: React.FC = () => {
                   </tr>
                 ) : (
                   tenants.map(tenant => (
-                    <tr key={tenant.id}>
-                      <td>{tenant.id}</td>
+                    <tr 
+                      key={tenant.id}
+                      style={isCurrentTenant(tenant) ? {
+                        background: 'linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
+                        borderLeft: '3px solid #667eea'
+                      } : {}}
+                    >
+                      <td>
+                        {tenant.id}
+                        {isCurrentTenant(tenant) && (
+                          <span style={{
+                            marginLeft: '8px',
+                            padding: '2px 8px',
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            color: 'white',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600
+                          }}>
+                            当前租户
+                          </span>
+                        )}
+                      </td>
                       <td className="tenant-name">
                         {tenant.logo_url ? (
                           <img 
@@ -327,22 +366,24 @@ export const TenantManagement: React.FC = () => {
                           >
                             ✏️ 编辑
                           </button>
-                          <button
-                            type="button"
-                            className="delete-btn"
-                            onClick={() => handleDeleteTenant(tenant)}
-                            style={{
-                              padding: '4px 8px',
-                              background: '#fee2e2',
-                              color: '#dc2626',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontSize: '0.875rem'
-                            }}
-                          >
-                            🗑️ 删除
-                          </button>
+                          {!isCurrentTenant(tenant) && (
+                            <button
+                              type="button"
+                              className="delete-btn"
+                              onClick={() => handleDeleteTenant(tenant)}
+                              style={{
+                                padding: '4px 8px',
+                                background: '#fee2e2',
+                                color: '#dc2626',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem'
+                              }}
+                            >
+                              🗑️ 删除
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -475,6 +516,18 @@ export const TenantManagement: React.FC = () => {
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>编辑租户 - {selectedTenant.name}</h3>
+              {isCurrentTenant(selectedTenant) && (
+                <span style={{
+                  padding: '4px 12px',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  borderRadius: '4px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600
+                }}>
+                  当前租户
+                </span>
+              )}
               <button
                 type="button"
                 className="close-btn"
@@ -483,6 +536,20 @@ export const TenantManagement: React.FC = () => {
                 ✕
               </button>
             </div>
+
+            {isCurrentTenant(selectedTenant) && (
+              <div style={{
+                padding: '0.75rem 1rem',
+                background: 'linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
+                borderLeft: '3px solid #667eea',
+                borderRadius: '4px',
+                marginBottom: '1rem',
+                fontSize: '0.875rem',
+                color: '#4c51bf'
+              }}>
+                ⚠️ 您正在编辑当前登录的租户。修改后，页面左上角的租户信息将自动同步更新。
+              </div>
+            )}
 
             {formError && (
               <div className="error-message">{formError}</div>
@@ -589,6 +656,18 @@ export const TenantManagement: React.FC = () => {
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
             <div className="modal-header">
               <h3>租户详情 - {selectedTenant.name}</h3>
+              {isCurrentTenant(selectedTenant) && (
+                <span style={{
+                  padding: '4px 12px',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  borderRadius: '4px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600
+                }}>
+                  当前租户
+                </span>
+              )}
               <button
                 type="button"
                 className="close-btn"
