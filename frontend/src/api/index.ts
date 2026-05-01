@@ -9,7 +9,12 @@ import {
   ItineraryCreate,
   ItineraryUpdate,
   ItineraryDetail,
-  AnalysisResponse
+  AnalysisResponse,
+  Tenant,
+  TenantWithQuota,
+  TenantCreate,
+  TenantUpdate,
+  QuotaUsage
 } from '../types';
 import apiAxios from '../utils/axios';
 
@@ -235,4 +240,59 @@ export function downloadFile(blob: Blob, filename: string): void {
   window.URL.revokeObjectURL(url);
   
   console.log('[API] 文件下载完成');
+}
+
+export async function getTenants(): Promise<Tenant[]> {
+  console.log('[API] 调用 getTenants');
+  const response = await apiAxios.get<Tenant[]>('/tenants/');
+  console.log('[API] getTenants 成功:', response.data);
+  return response.data;
+}
+
+export async function getTenantById(tenantId: number): Promise<TenantWithQuota> {
+  console.log('[API] 调用 getTenantById:', tenantId);
+  const response = await apiAxios.get<TenantWithQuota>(`/tenants/${tenantId}`);
+  console.log('[API] getTenantById 成功:', response.data);
+  return response.data;
+}
+
+export async function createTenant(tenant: TenantCreate): Promise<Tenant> {
+  console.log('[API] 调用 createTenant:', tenant);
+  const response = await apiAxios.post<Tenant>('/tenants/', tenant);
+  console.log('[API] createTenant 成功:', response.data);
+  return response.data;
+}
+
+export async function updateTenant(tenantId: number, tenant: TenantUpdate): Promise<Tenant> {
+  console.log('[API] 调用 updateTenant:', tenantId, tenant);
+  const response = await apiAxios.put<Tenant>(`/tenants/${tenantId}`, tenant);
+  console.log('[API] updateTenant 成功:', response.data);
+  return response.data;
+}
+
+export async function deleteTenant(tenantId: number): Promise<void> {
+  console.log('[API] 调用 deleteTenant:', tenantId);
+  await apiAxios.delete(`/tenants/${tenantId}`);
+  console.log('[API] deleteTenant 成功');
+}
+
+export async function getMyQuota(): Promise<QuotaUsage> {
+  console.log('[API] 调用 getMyQuota');
+  const response = await apiAxios.get<QuotaUsage>('/tenants/my/quota');
+  console.log('[API] getMyQuota 成功:', response.data);
+  return response.data;
+}
+
+export async function getMyTenantInfo(): Promise<TenantWithQuota> {
+  console.log('[API] 调用 getMyTenantInfo');
+  const response = await apiAxios.get<TenantWithQuota>('/tenants/my/info');
+  console.log('[API] getMyTenantInfo 成功:', response.data);
+  return response.data;
+}
+
+export async function resetTenantQuota(tenantId: number): Promise<QuotaUsage> {
+  console.log('[API] 调用 resetTenantQuota:', tenantId);
+  const response = await apiAxios.post<QuotaUsage>(`/tenants/${tenantId}/quota/reset`);
+  console.log('[API] resetTenantQuota 成功:', response.data);
+  return response.data;
 }

@@ -179,3 +179,51 @@ export interface AnalysisResponse {
     top_city_count: number;
   };
 }
+
+export interface Tenant {
+  id: number;
+  name: string;
+  code: string;
+  description?: string;
+  logo_url?: string;
+  itinerary_limit: number;
+  ai_calls_limit: number;
+  created_at: string;
+  is_active: boolean;
+  itinerary_used: number;
+  ai_calls_used: number;
+}
+
+export interface TenantWithQuota extends Tenant {
+  itinerary_remaining: number;
+  ai_calls_remaining: number;
+  itinerary_percentage: number;
+  ai_calls_percentage: number;
+}
+
+export interface QuotaUsage {
+  itinerary_used: number;
+  ai_calls_used: number;
+  itinerary_limit: number;
+  ai_calls_limit: number;
+  itinerary_remaining: number;
+  ai_calls_remaining: number;
+}
+
+export interface TenantCreate {
+  name: string;
+  code: string;
+  description?: string;
+  logo_url?: string;
+  itinerary_limit?: number;
+  ai_calls_limit?: number;
+}
+
+export interface TenantUpdate {
+  name?: string;
+  description?: string;
+  logo_url?: string;
+  is_active?: boolean;
+  itinerary_limit?: number;
+  ai_calls_limit?: number;
+}
