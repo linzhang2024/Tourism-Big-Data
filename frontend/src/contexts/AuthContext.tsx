@@ -1,11 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, AuthState, LoginRequest, LoginResponse } from '../types';
+import { User, AuthState, LoginRequest, LoginResponse, RegisterRequest } from '../types';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 
+export interface LoginResult {
+  success: boolean;
+  error?: string;
+  errorCode?: 'PENDING' | 'REJECTED' | 'INVALID_CREDENTIALS' | 'UNKNOWN';
+}
+
 interface AuthContextType extends AuthState {
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<LoginResult>;
+  register: (request: RegisterRequest) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   refreshUser: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
@@ -78,7 +85,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initAuth();
   }, []);
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<LoginResult> => {
     console.log(`[AuthContext] 开始登录流程: 用户名='${username}'`);
     
     try {
@@ -92,8 +99,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: '登录失败' }));
-        console.error(`[AuthContext] 登录请求失败: ${errorData.detail}`);
-        return false;
+        const errorMessage = errorData.detail || '登录失败';
+        console.error(`[AuthContext] 登录请求失败: ${errorMessage}`);
+        
+        let errorCode: LoginResult['errorCode'] = 'UNKNOWN';
+        if (response.status === 403) {
+          if (errorMessage.includes('待审核')) {
+            errorCode = 'PENDING';
+          } else if (errorMessage.includes('拒绝')) {
+            errorCode = 'REJECTED';
+          }
+        } else if (response.status === 401) {
+          errorCode = 'INVALID_CREDENTIALS';
+        }
+        
+        return {
+          success: false,
+          error: errorMessage,
+          errorCode
+        };
       }
 
       const data: LoginResponse = await response.json();
@@ -112,10 +136,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       console.log('[AuthContext] 认证状态已更新: isAuthenticated=true');
-      return true;
+      return { success: true };
     } catch (error) {
       console.error('[AuthContext] 登录过程中发生错误:', error);
-      return false;
+      return {
+        success: false,
+        error: '登录过程中发生错误',
+        errorCode: 'UNKNOWN'
+      };
+    }
+  };
+
+  const register = async (request: RegisterRequest): Promise<{ success: boolean; error?: string }> => {
+    console.log(`[AuthContext] 开始注册流程: 用户名='${request.username}'`);
+    
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: '注册失败' }));
+        const errorMessage = errorData.detail || '注册失败';
+        console.error(`[AuthContext] 注册请求失败: ${errorMessage}`);
+        return { success: false, error: errorMessage };
+      }
+
+      const data = await response.json();
+      console.log(`[AuthContext] 注册申请提交成功: 用户='${data.username}', 状态='${data.status}'`);
+      return { success: true };
+    } catch (error) {
+      console.error('[AuthContext] 注册过程中发生错误:', error);
+      return { success: false, error: '注册过程中发生错误' };
     }
   };
 
@@ -204,6 +260,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const value: AuthContextType = {
     ...state,
     login,
+    register,
     logout,
     refreshUser,
     hasPermission,

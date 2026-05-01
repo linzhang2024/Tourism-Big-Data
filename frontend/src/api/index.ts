@@ -14,7 +14,10 @@ import {
   TenantWithQuota,
   TenantCreate,
   TenantUpdate,
-  QuotaUsage
+  QuotaUsage,
+  User,
+  RegisterRequest,
+  RejectRequest
 } from '../types';
 import apiAxios from '../utils/axios';
 
@@ -295,4 +298,44 @@ export async function resetTenantQuota(tenantId: number): Promise<QuotaUsage> {
   const response = await apiAxios.post<QuotaUsage>(`/tenants/${tenantId}/quota/reset`);
   console.log('[API] resetTenantQuota 成功:', response.data);
   return response.data;
+}
+
+export async function register(request: RegisterRequest): Promise<User> {
+  console.log('[API] 调用 register:', request.username);
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: '注册失败' }));
+    throw new Error(errorData.detail || '注册失败');
+  }
+
+  const data = await response.json();
+  console.log('[API] register 成功:', data);
+  return data;
+}
+
+export async function getPendingUsers(): Promise<User[]> {
+  console.log('[API] 调用 getPendingUsers');
+  const response = await apiAxios.get<User[]>('/auth/pending');
+  console.log('[API] getPendingUsers 成功:', response.data);
+  return response.data;
+}
+
+export async function approveUser(userId: number): Promise<User> {
+  console.log('[API] 调用 approveUser:', userId);
+  const response = await apiAxios.post<User>(`/auth/approve/${userId}`);
+  console.log('[API] approveUser 成功:', response.data);
+  return response.data;
+}
+
+export async function rejectUser(userId: number, reason?: string): Promise<void> {
+  console.log('[API] 调用 rejectUser:', userId, '原因:', reason);
+  await apiAxios.post(`/auth/reject/${userId}`, { reason });
+  console.log('[API] rejectUser 成功');
 }
