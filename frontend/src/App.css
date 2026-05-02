@@ -367,20 +367,22 @@
 }
 
 .table-container {
-  overflow-x: auto;
+  overflow-x: visible;
+  position: relative;
 }
 
 .role-table,
 .tenant-table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 900px;
 }
 
 .role-table th,
 .role-table td,
 .tenant-table th,
 .tenant-table td {
-  padding: 1rem;
+  padding: 1.25rem 1rem;
   text-align: left;
   border-bottom: 1px solid #e5e7eb;
   vertical-align: middle;
@@ -392,6 +394,7 @@
   font-weight: 600;
   color: #374151;
   white-space: nowrap;
+  padding: 1rem;
 }
 
 .role-table tr:hover,
@@ -401,6 +404,26 @@
 
 .tenant-table td {
   line-height: 1.6;
+  overflow: visible;
+}
+
+.tenant-table tr {
+  position: relative;
+}
+
+@media (max-width: 1200px) {
+  .tenant-table {
+    min-width: 800px;
+  }
+}
+
+@media (max-width: 992px) {
+  .tenant-table {
+    min-width: 750px;
+  }
+  .table-container {
+    overflow-x: auto;
+  }
 }
 
 .role-name {
