@@ -10,7 +10,7 @@ class TenantBase(BaseModel):
     logo_url: Optional[str] = Field(None, description="租户Logo URL")
     itinerary_limit: Optional[int] = Field(100, description="行程数量上限")
     ai_calls_limit: Optional[int] = Field(50, description="AI调用次数上限")
-    allowed_role_codes: List[str] = Field(default_factory=list, description="该租户允许使用的角色代码列表")
+    allowed_role_codes: Optional[List[str]] = Field(None, description="该租户允许使用的角色代码列表。None=未配置，使用原角色权限；空列表[]=不允许任何角色，降级为USER角色")
 
 
 class TenantCreate(TenantBase):
