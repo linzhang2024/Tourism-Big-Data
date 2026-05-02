@@ -1,9 +1,36 @@
-import React, { useState, useEffect } from 'react';
-import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota, User, RoleResponse } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota, User, RoleResponse, PermissionCategory, PermissionResponse } from '../types';
 import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota, getPendingUsers, getRejectedUsers, approveUser, rejectUser, getRoles } from '../api';
 import { useTenant } from '../contexts/TenantContext';
 
 type TabType = 'tenants' | 'pending' | 'rejected';
+
+const CATEGORY_ICONS: Record<PermissionCategory, string> = {
+  '系统管理': '⚙️',
+  '行程业务': '🗺️',
+  '菜单可见性': '📋',
+  '数据操作': '📊',
+  '爬虫管理': '🕷️',
+};
+
+const CATEGORY_ORDER: PermissionCategory[] = [
+  '系统管理',
+  '行程业务',
+  '菜单可见性',
+  '数据操作',
+  '爬虫管理',
+];
+
+const groupPermissionsByCategory = (perms: PermissionResponse[]): Record<PermissionCategory, PermissionResponse[]> => {
+  const grouped: Record<string, PermissionResponse[]> = {};
+  perms.forEach(perm => {
+    if (!grouped[perm.category]) {
+      grouped[perm.category] = [];
+    }
+    grouped[perm.category].push(perm);
+  });
+  return grouped as Record<PermissionCategory, PermissionResponse[]>;
+};
 
 export const TenantManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('tenants');
@@ -14,6 +41,8 @@ export const TenantManagement: React.FC = () => {
   
   const [roles, setRoles] = useState<RoleResponse[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
+  
+  const [expandedRoleCodes, setExpandedRoleCodes] = useState<Set<string>>(new Set());
   
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
@@ -1059,66 +1088,258 @@ export const TenantManagement: React.FC = () => {
                   ) : roles.length === 0 ? (
                     <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>暂无角色数据</div>
                   ) : (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {roles.map(role => {
                         const isSelected = (editFormData.allowed_role_codes || []).includes(role.code);
+                        const isExpanded = expandedRoleCodes.has(role.code);
+                        const groupedPerms = groupPermissionsByCategory(role.permissions);
+                        
+                        const toggleExpand = (e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          setExpandedRoleCodes(prev => {
+                            const newSet = new Set(prev);
+                            if (newSet.has(role.code)) {
+                              newSet.delete(role.code);
+                            } else {
+                              newSet.add(role.code);
+                            }
+                            return newSet;
+                          });
+                        };
+                        
                         return (
-                          <label 
+                          <div
                             key={role.id}
                             style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '8px 12px',
-                              background: isSelected ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)' : 'white',
-                              border: isSelected ? '1px solid #667eea' : '1px solid #e5e7eb',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s'
+                              border: isSelected 
+                                ? '1px solid #667eea' 
+                                : '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              background: isSelected 
+                                ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)' 
+                                : 'white',
+                              transition: 'all 0.2s',
                             }}
                           >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(e) => {
-                                const currentRoles = editFormData.allowed_role_codes || [];
-                                if (e.target.checked) {
-                                  setEditFormData(prev => ({
-                                    ...prev,
-                                    allowed_role_codes: [...currentRoles, role.code]
-                                  }));
-                                } else {
-                                  setEditFormData(prev => ({
-                                    ...prev,
-                                    allowed_role_codes: currentRoles.filter(c => c !== role.code)
-                                  }));
-                                }
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                padding: '10px 12px',
+                                cursor: 'pointer',
                               }}
-                              style={{ margin: 0 }}
-                            />
-                            <div>
-                              <div style={{ fontWeight: 500, fontSize: '0.9rem', color: '#374151' }}>
-                                {role.name}
-                              </div>
-                              <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                                {role.code}
-                              </div>
+                              onClick={toggleExpand}
+                            >
+                              <label
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px',
+                                  cursor: 'pointer',
+                                  flex: 1,
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    const currentRoles = editFormData.allowed_role_codes || [];
+                                    if (e.target.checked) {
+                                      setEditFormData(prev => ({
+                                        ...prev,
+                                        allowed_role_codes: [...currentRoles, role.code]
+                                      }));
+                                    } else {
+                                      setEditFormData(prev => ({
+                                        ...prev,
+                                        allowed_role_codes: currentRoles.filter(c => c !== role.code)
+                                      }));
+                                    }
+                                  }}
+                                  style={{ 
+                                    width: '16px', 
+                                    height: '16px', 
+                                    cursor: 'pointer',
+                                    margin: 0,
+                                  }}
+                                />
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ 
+                                    fontWeight: 600, 
+                                    fontSize: '0.95rem', 
+                                    color: isSelected ? '#4c51bf' : '#374151',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                  }}>
+                                    {role.name}
+                                    <span style={{
+                                      fontSize: '0.7rem',
+                                      fontWeight: 500,
+                                      color: isSelected ? '#667eea' : '#6b7280',
+                                      background: isSelected 
+                                        ? 'rgba(102, 126, 234, 0.1)' 
+                                        : '#e5e7eb',
+                                      padding: '2px 8px',
+                                      borderRadius: '9999px',
+                                    }}>
+                                      {role.code}
+                                    </span>
+                                  </div>
+                                  <div style={{ 
+                                    fontSize: '0.75rem', 
+                                    color: '#6b7280',
+                                    marginTop: '2px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                  }}>
+                                    <span>共 {role.permissions.length} 个权限</span>
+                                    <span style={{ color: '#d1d5db' }}>|</span>
+                                    <span>
+                                      {CATEGORY_ORDER
+                                        .filter(cat => groupedPerms[cat]?.length > 0)
+                                        .map(cat => `${CATEGORY_ICONS[cat]} ${groupedPerms[cat].length}`)
+                                        .join('  ')}
+                                    </span>
+                                  </div>
+                                </div>
+                              </label>
+                              <span style={{
+                                transition: 'transform 0.3s',
+                                transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                color: '#6b7280',
+                                fontSize: '1rem',
+                                padding: '4px',
+                              }}>
+                                ▼
+                              </span>
                             </div>
-                          </label>
+                            
+                            {isExpanded && (
+                              <div style={{
+                                padding: '0 12px 12px',
+                                borderTop: '1px solid #e5e7eb',
+                                background: 'white',
+                              }}>
+                                <div style={{ 
+                                  display: 'flex', 
+                                  flexDirection: 'column', 
+                                  gap: '12px',
+                                  marginTop: '12px',
+                                }}>
+                                  {CATEGORY_ORDER.map(category => {
+                                    const categoryPerms = groupedPerms[category] || [];
+                                    if (categoryPerms.length === 0) return null;
+                                    
+                                    return (
+                                      <div key={category}>
+                                        <div style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '6px',
+                                          marginBottom: '6px',
+                                          paddingLeft: '4px',
+                                        }}>
+                                          <span style={{ fontSize: '0.9rem' }}>
+                                            {CATEGORY_ICONS[category]}
+                                          </span>
+                                          <span style={{
+                                            fontWeight: 600,
+                                            fontSize: '0.8rem',
+                                            color: '#374151',
+                                          }}>
+                                            {category}
+                                          </span>
+                                          <span style={{
+                                            fontSize: '0.7rem',
+                                            color: '#9ca3af',
+                                            background: '#f3f4f6',
+                                            padding: '1px 6px',
+                                            borderRadius: '4px',
+                                          }}>
+                                            {categoryPerms.length}
+                                          </span>
+                                        </div>
+                                        <div style={{
+                                          display: 'flex',
+                                          flexWrap: 'wrap',
+                                          gap: '6px',
+                                          paddingLeft: '28px',
+                                        }}>
+                                          {categoryPerms.map(perm => (
+                                            <div
+                                              key={perm.id}
+                                              style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                padding: '4px 10px',
+                                                background: '#f9fafb',
+                                                border: '1px solid #e5e7eb',
+                                                borderRadius: '4px',
+                                                fontSize: '0.75rem',
+                                              }}
+                                            >
+                                              <span style={{
+                                                fontWeight: 500,
+                                                color: '#374151',
+                                              }}>
+                                                {perm.name}
+                                              </span>
+                                              <span style={{
+                                                fontSize: '0.65rem',
+                                                color: '#6b7280',
+                                                background: perm.permission_type === 'menu' 
+                                                  ? '#dbeafe' 
+                                                  : '#dcfce7',
+                                                padding: '1px 4px',
+                                                borderRadius: '3px',
+                                              }}>
+                                                {perm.permission_type === 'menu' ? '菜单' : '数据'}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  
+                                  {role.description && (
+                                    <div style={{
+                                      marginTop: '8px',
+                                      padding: '8px 12px',
+                                      background: '#f9fafb',
+                                      borderRadius: '6px',
+                                      fontSize: '0.75rem',
+                                      color: '#6b7280',
+                                    }}>
+                                      <strong>角色说明：</strong> {role.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
                   )}
                   <div style={{ 
-                    marginTop: '0.75rem', 
+                    marginTop: '1rem', 
                     fontSize: '0.75rem', 
                     color: '#6b7280',
                     paddingTop: '0.75rem',
                     borderTop: '1px solid #e5e7eb'
                   }}>
-                    <strong>说明：</strong>勾选的角色表示该租户下的成员可以使用的角色。租户成员登录时，系统将根据其角色和租户配置动态下发权限。
+                    <strong>💡 提示：</strong>
+                    <span style={{ marginLeft: '4px' }}>
+                      勾选的角色表示该租户下的成员可以使用的角色。点击角色卡片右侧的箭头可展开查看该角色包含的权限及分类。租户成员登录时，系统将根据其角色和租户配置动态下发权限。
+                    </span>
                     {(!editFormData.allowed_role_codes || editFormData.allowed_role_codes.length === 0) && (
-                      <span style={{ color: '#ef4444', display: 'block', marginTop: '4px' }}>
+                      <span style={{ color: '#ef4444', display: 'block', marginTop: '4px', fontWeight: 500 }}>
                         ⚠️ 未选择任何角色时，租户成员将只能使用默认的USER角色权限。
                       </span>
                     )}

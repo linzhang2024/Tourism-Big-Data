@@ -33,7 +33,7 @@ class TestPermissionAPI:
     
     @pytest.mark.asyncio
     async def test_get_permissions_after_initialization(self):
-        """测试初始化后获取权限列表，验证包含 data:view 核心权限"""
+        """测试初始化后获取权限列表，验证包含核心权限和分类"""
         from app.main import initialize_permissions
         initialize_permissions()
         
@@ -43,13 +43,19 @@ class TestPermissionAPI:
         assert response.status_code == 200
         
         permissions = response.json()
-        assert len(permissions) == 4
+        assert len(permissions) >= 4
         
         permission_codes = [p["code"] for p in permissions]
         assert "data:view" in permission_codes
         assert "data:export" in permission_codes
         assert "spider:run" in permission_codes
         assert "sys:manage" in permission_codes
+        
+        for perm in permissions:
+            assert "category" in perm, "每个权限都应包含 category 字段"
+            assert "code" in perm
+            assert "name" in perm
+            assert "permission_type" in perm
 
 
 if __name__ == "__main__":

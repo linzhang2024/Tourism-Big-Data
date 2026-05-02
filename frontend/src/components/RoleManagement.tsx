@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { RoleResponse, RoleCreate, PermissionResponse } from '../types';
+import { RoleResponse, RoleCreate, PermissionResponse, PermissionCategory } from '../types';
 import { getRoles, createRole, getPermissions, updateRolePermissions } from '../api';
+
+const CATEGORY_ICONS: Record<PermissionCategory, string> = {
+  '系统管理': '⚙️',
+  '行程业务': '🗺️',
+  '菜单可见性': '📋',
+  '数据操作': '📊',
+  '爬虫管理': '🕷️',
+};
+
+const CATEGORY_ORDER: PermissionCategory[] = [
+  '系统管理',
+  '行程业务',
+  '菜单可见性',
+  '数据操作',
+  '爬虫管理',
+];
 
 export const RoleManagement: React.FC = () => {
   const [roles, setRoles] = useState<RoleResponse[]>([]);
@@ -11,6 +27,9 @@ export const RoleManagement: React.FC = () => {
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState<RoleResponse | null>(null);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [expandedCategories, setExpandedCategories] = useState<Set<PermissionCategory>>(
+    new Set(CATEGORY_ORDER)
+  );
   const [formData, setFormData] = useState<RoleCreate>({
     name: '',
     code: '',
@@ -78,6 +97,7 @@ export const RoleManagement: React.FC = () => {
     setSelectedRole(role);
     setSelectedPermissions(role.permissions.map(p => p.code));
     setPermissionError(null);
+    setExpandedCategories(new Set(CATEGORY_ORDER));
     setShowPermissionModal(true);
   };
 
@@ -89,6 +109,54 @@ export const RoleManagement: React.FC = () => {
         return [...prev, permissionCode];
       }
     });
+  };
+
+  const toggleCategory = (category: PermissionCategory) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(category)) {
+        newSet.delete(category);
+      } else {
+        newSet.add(category);
+      }
+      return newSet;
+    });
+  };
+
+  const handleCategorySelectAll = (category: string) => {
+    const categoryPermissions = permissions.filter(p => p.category === category);
+    const allSelected = categoryPermissions.every(p => selectedPermissions.includes(p.code));
+    
+    if (allSelected) {
+      const newSelected = selectedPermissions.filter(code => 
+        !categoryPermissions.some(p => p.code === code)
+      );
+      setSelectedPermissions(newSelected);
+    } else {
+      const newSelected = [...selectedPermissions];
+      categoryPermissions.forEach(p => {
+        if (!newSelected.includes(p.code)) {
+          newSelected.push(p.code);
+        }
+      });
+      setSelectedPermissions(newSelected);
+    }
+  };
+
+  const expandAll = () => {
+    setExpandedCategories(new Set(CATEGORY_ORDER));
+  };
+
+  const collapseAll = () => {
+    setExpandedCategories(new Set());
+  };
+
+  const selectAll = () => {
+    setSelectedPermissions(permissions.map(p => p.code));
+  };
+
+  const clearAll = () => {
+    setSelectedPermissions([]);
   };
 
   const handleSavePermissions = async () => {
@@ -106,6 +174,50 @@ export const RoleManagement: React.FC = () => {
     } finally {
       setPermissionSaving(false);
     }
+  };
+
+  const groupPermissionsByCategory = (perms: PermissionResponse[]): Record<PermissionCategory, PermissionResponse[]> => {
+    const grouped: Record<string, PermissionResponse[]> = {};
+    perms.forEach(perm => {
+      if (!grouped[perm.category]) {
+        grouped[perm.category] = [];
+      }
+      grouped[perm.category].push(perm);
+    });
+    return grouped as Record<PermissionCategory, PermissionResponse[]>;
+  };
+
+  const groupedPermissions = groupPermissionsByCategory(permissions);
+
+  const getPermissionTypeBadge = (type: string) => {
+    if (type === 'menu') {
+      return (
+        <span style={{
+          background: '#dbeafe',
+          color: '#1d4ed8',
+          padding: '2px 8px',
+          borderRadius: '4px',
+          fontSize: '0.7rem',
+          fontWeight: 500,
+          marginLeft: 'auto',
+        }}>
+          菜单
+        </span>
+      );
+    }
+    return (
+      <span style={{
+        background: '#dcfce7',
+        color: '#15803d',
+        padding: '2px 8px',
+        borderRadius: '4px',
+        fontSize: '0.7rem',
+        fontWeight: 500,
+        marginLeft: 'auto',
+      }}>
+        数据
+      </span>
+    );
   };
 
   return (
@@ -230,7 +342,7 @@ export const RoleManagement: React.FC = () => {
                 <textarea
                   id="description"
                   name="description"
-                  value={formData.description}
+                  value={formData.description || ''}
                   onChange={handleInputChange}
                   placeholder="角色详细描述"
                   rows={3}
@@ -260,9 +372,26 @@ export const RoleManagement: React.FC = () => {
 
       {showPermissionModal && selectedRole && (
         <div className="modal-overlay" onClick={() => setShowPermissionModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-            <div className="modal-header">
-              <h3>权限设置 - {selectedRole.name}</h3>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ 
+            maxWidth: '700px', 
+            maxHeight: '85vh', 
+            display: 'flex', 
+            flexDirection: 'column' 
+          }}>
+            <div className="modal-header" style={{ flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <h3>权限设置</h3>
+                <span style={{
+                  padding: '4px 12px',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  borderRadius: '4px',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                }}>
+                  {selectedRole.name}
+                </span>
+              </div>
               <button
                 type="button"
                 className="close-btn"
@@ -273,121 +402,319 @@ export const RoleManagement: React.FC = () => {
             </div>
 
             {permissionError && (
-              <div className="error-message">{permissionError}</div>
+              <div className="error-message" style={{ margin: '0 1.25rem 1rem', flexShrink: 0 }}>
+                {permissionError}
+              </div>
             )}
 
-            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
+            <div style={{
+              padding: '0.75rem 1.25rem',
+              background: '#f9fafb',
+              borderBottom: '1px solid #e5e7eb',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexShrink: 0,
+            }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={expandAll}
+                  style={{
+                    padding: '5px 10px',
+                    background: 'white',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    color: '#374151',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f3f4f6';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'white';
+                  }}
+                >
+                  展开全部
+                </button>
+                <button
+                  type="button"
+                  onClick={collapseAll}
+                  style={{
+                    padding: '5px 10px',
+                    background: 'white',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    color: '#374151',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f3f4f6';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'white';
+                  }}
+                >
+                  收起全部
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={selectAll}
+                  style={{
+                    padding: '5px 10px',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    color: 'white',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.5)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(102, 126, 234, 0.3)';
+                  }}
+                >
+                  全选
+                </button>
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  style={{
+                    padding: '5px 10px',
+                    background: '#fee2e2',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    color: '#dc2626',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#fecaca';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#fee2e2';
+                  }}
+                >
+                  清空
+                </button>
+              </div>
+            </div>
+
+            <div style={{ 
+              flex: 1, 
+              overflowY: 'auto', 
+              padding: '1rem 1.25rem',
+              minHeight: '0',
+            }}>
               {permissions.length === 0 ? (
                 <div className="empty-permissions">暂无权限数据</div>
               ) : (
-                <>
-                  {(() => {
-                    const menuPermissions = permissions.filter(p => p.permission_type === 'menu');
-                    const dataPermissions = permissions.filter(p => p.permission_type === 'data');
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {CATEGORY_ORDER.map(category => {
+                    const categoryPerms = groupedPermissions[category] || [];
+                    if (categoryPerms.length === 0) return null;
                     
-                    const renderPermissionGroup = (title: string, type: string, perms: typeof permissions, icon: string) => {
-                      if (perms.length === 0) return null;
-                      
-                      const allSelected = perms.every(p => selectedPermissions.includes(p.code));
-                      const someSelected = perms.some(p => selectedPermissions.includes(p.code));
-                      
-                      const handleSelectAll = () => {
-                        if (allSelected) {
-                          const newSelected = selectedPermissions.filter(code => 
-                            !perms.some(p => p.code === code)
-                          );
-                          setSelectedPermissions(newSelected);
-                        } else {
-                          const newSelected = [...selectedPermissions];
-                          perms.forEach(p => {
-                            if (!newSelected.includes(p.code)) {
-                              newSelected.push(p.code);
-                            }
-                          });
-                          setSelectedPermissions(newSelected);
-                        }
-                      };
-                      
-                      return (
-                        <div key={type} style={{ marginBottom: '1.5rem' }}>
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
+                    const isExpanded = expandedCategories.has(category);
+                    const allSelected = categoryPerms.every(p => selectedPermissions.includes(p.code));
+                    const someSelected = categoryPerms.some(p => selectedPermissions.includes(p.code));
+                    const selectedCount = categoryPerms.filter(p => selectedPermissions.includes(p.code)).length;
+                    
+                    return (
+                      <div
+                        key={category}
+                        style={{
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          onClick={() => toggleCategory(category)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
                             justifyContent: 'space-between',
-                            padding: '0.75rem 1rem',
-                            background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)',
-                            borderRadius: '8px',
-                            marginBottom: '0.75rem'
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: '#374151' }}>
-                              <span>{icon}</span>
-                              <span>{title}</span>
-                              <span style={{ 
-                                fontSize: '0.75rem', 
-                                color: '#6b7280', 
-                                background: '#e5e7eb',
-                                padding: '2px 8px',
-                                borderRadius: '9999px',
-                                fontWeight: 400
-                              }}>
-                                {perms.filter(p => selectedPermissions.includes(p.code)).length}/{perms.length}
-                              </span>
-                            </div>
-                            <label style={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: '6px', 
-                              cursor: 'pointer',
-                              fontSize: '0.875rem',
-                              color: '#6b7280'
-                            }}>
+                            padding: '0.875rem 1rem',
+                            background: allSelected 
+                              ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)'
+                              : 'linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%)',
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                            borderBottom: isExpanded ? '1px solid #e5e7eb' : 'none',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+                            <label
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCategorySelectAll(category);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                cursor: 'pointer',
+                              }}
+                            >
                               <input
                                 type="checkbox"
                                 checked={allSelected}
                                 ref={(el) => {
                                   if (el) el.indeterminate = someSelected && !allSelected;
                                 }}
-                                onChange={handleSelectAll}
+                                onChange={() => handleCategorySelectAll(category)}
+                                style={{ cursor: 'pointer', width: '16px', height: '16px' }}
                               />
-                              <span>全选</span>
                             </label>
+                            <span style={{ fontSize: '1.1rem' }}>
+                              {CATEGORY_ICONS[category]}
+                            </span>
+                            <div>
+                              <div style={{ fontWeight: 600, color: '#374151', fontSize: '0.95rem' }}>
+                                {category}
+                              </div>
+                            </div>
+                            <span style={{
+                              fontSize: '0.75rem',
+                              color: '#6b7280',
+                              background: allSelected ? 'rgba(102, 126, 234, 0.1)' : '#e5e7eb',
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              fontWeight: 500,
+                            }}>
+                              {selectedCount}/{categoryPerms.length}
+                            </span>
                           </div>
-                          
-                          <div style={{ display: 'grid', gap: '4px' }}>
-                            {perms.map(permission => (
-                              <label key={permission.id} className="permission-item" style={{ margin: 0 }}>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedPermissions.includes(permission.code)}
-                                  onChange={() => handlePermissionToggle(permission.code)}
-                                  className="permission-checkbox"
-                                />
-                                <div className="permission-info">
-                                  <div className="permission-name">{permission.name}</div>
-                                  <div className="permission-code">{permission.code}</div>
-                                  <div className="permission-desc">{permission.description || '暂无描述'}</div>
-                                </div>
-                              </label>
-                            ))}
-                          </div>
+                          <span style={{
+                            transition: 'transform 0.3s',
+                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                            color: '#6b7280',
+                            fontSize: '1rem',
+                            marginLeft: '8px',
+                          }}>
+                            ▼
+                          </span>
                         </div>
-                      );
-                    };
-                    
-                    return (
-                      <>
-                        {renderPermissionGroup('菜单权限', 'menu', menuPermissions, '📋')}
-                        {renderPermissionGroup('数据权限', 'data', dataPermissions, '🔧')}
-                      </>
+                        
+                        {isExpanded && (
+                          <div style={{
+                            padding: '0.5rem',
+                            background: 'white',
+                          }}>
+                            <div style={{ 
+                              display: 'grid', 
+                              gap: '4px',
+                            }}>
+                              {categoryPerms.map(permission => {
+                                const isSelected = selectedPermissions.includes(permission.code);
+                                return (
+                                  <label
+                                    key={permission.id}
+                                    className="permission-item"
+                                    style={{ 
+                                      margin: 0,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '10px',
+                                      padding: '0.625rem 0.75rem',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s',
+                                      background: isSelected 
+                                        ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)'
+                                        : 'transparent',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (!isSelected) {
+                                        e.currentTarget.style.background = '#f9fafb';
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (!isSelected) {
+                                        e.currentTarget.style.background = 'transparent';
+                                      }
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => handlePermissionToggle(permission.code)}
+                                      className="permission-checkbox"
+                                      style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                    />
+                                    <div className="permission-info" style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '8px',
+                                        flexWrap: 'wrap',
+                                      }}>
+                                        <div className="permission-name" style={{ 
+                                          fontWeight: 500, 
+                                          color: isSelected ? '#4c51bf' : '#374151',
+                                        }}>
+                                          {permission.name}
+                                        </div>
+                                        {getPermissionTypeBadge(permission.permission_type)}
+                                      </div>
+                                      <div style={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '8px',
+                                        marginTop: '2px',
+                                      }}>
+                                        <div className="permission-code" style={{ fontSize: '0.75rem' }}>
+                                          {permission.code}
+                                        </div>
+                                        {permission.description && (
+                                          <div className="permission-desc" style={{ 
+                                            fontSize: '0.75rem', 
+                                            color: '#9ca3af',
+                                          }}>
+                                            {permission.description}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     );
-                  })()}
-                </>
+                  })}
+                </div>
               )}
             </div>
 
-            <div className="modal-footer" style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1rem', marginTop: '0' }}>
+            <div className="modal-footer" style={{ 
+              borderTop: '1px solid #e5e7eb', 
+              paddingTop: '1rem', 
+              marginTop: '0',
+              flexShrink: 0,
+            }}>
               <div style={{ marginRight: 'auto', color: '#6b7280', fontSize: '0.875rem' }}>
                 已选择 <strong style={{ color: '#667eea' }}>{selectedPermissions.length}</strong> 个权限
+                <span style={{ 
+                  color: '#9ca3af', 
+                  marginLeft: '4px',
+                  fontSize: '0.8rem',
+                }}>
+                  / 共 {permissions.length} 个
+                </span>
               </div>
               <button
                 type="button"
