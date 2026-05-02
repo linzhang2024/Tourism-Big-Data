@@ -10,11 +10,14 @@ export interface TrendModel {
 
 export type PermissionType = 'menu' | 'data';
 
+export type PermissionCategory = '系统管理' | '行程业务' | '菜单可见性' | '数据操作' | '爬虫管理';
+
 export interface PermissionResponse {
   id: number;
   name: string;
   code: string;
   permission_type: PermissionType;
+  category: PermissionCategory;
   description?: string;
   created_at: string;
 }

@@ -43,97 +43,117 @@ def initialize_roles():
 
 
 def initialize_permissions():
-    from app.models.permission import PermissionType
+    from app.models.permission import (
+        PermissionType, 
+        PermissionCategory, 
+        get_permission_category,
+        PERMISSION_CATEGORY_MAP
+    )
     
     default_permissions = [
         PermissionCreate(
             name="查看数据",
             code=PermissionCode.DATA_VIEW,
             permission_type=PermissionType.DATA,
+            category=PermissionCategory.DATA_OPERATIONS,
             description="查看系统数据的权限"
         ),
         PermissionCreate(
             name="导出数据",
             code=PermissionCode.DATA_EXPORT,
             permission_type=PermissionType.DATA,
+            category=PermissionCategory.DATA_OPERATIONS,
             description="导出系统数据的权限"
         ),
         PermissionCreate(
             name="启动爬虫",
             code=PermissionCode.SPIDER_RUN,
             permission_type=PermissionType.DATA,
+            category=PermissionCategory.SPIDER_MANAGEMENT,
             description="启动数据爬虫任务的权限"
         ),
         PermissionCreate(
             name="系统管理",
             code=PermissionCode.SYS_MANAGE,
             permission_type=PermissionType.DATA,
+            category=PermissionCategory.SYSTEM_MANAGEMENT,
             description="系统管理相关操作的权限"
         ),
         PermissionCreate(
             name="查看行程",
             code=PermissionCode.ITINERARY_VIEW,
             permission_type=PermissionType.DATA,
+            category=PermissionCategory.ITINERARY_BUSINESS,
             description="查看行程列表和详情的权限"
         ),
         PermissionCreate(
             name="创建行程",
             code=PermissionCode.ITINERARY_CREATE,
             permission_type=PermissionType.DATA,
+            category=PermissionCategory.ITINERARY_BUSINESS,
             description="创建新行程的权限"
         ),
         PermissionCreate(
             name="更新行程",
             code=PermissionCode.ITINERARY_UPDATE,
             permission_type=PermissionType.DATA,
+            category=PermissionCategory.ITINERARY_BUSINESS,
             description="更新行程信息的权限"
         ),
         PermissionCreate(
             name="删除行程",
             code=PermissionCode.ITINERARY_DELETE,
             permission_type=PermissionType.DATA,
+            category=PermissionCategory.ITINERARY_BUSINESS,
             description="删除行程的权限"
         ),
         PermissionCreate(
             name="数据面板",
             code=PermissionCode.MENU_DASHBOARD,
             permission_type=PermissionType.MENU,
+            category=PermissionCategory.MENU_VISIBILITY,
             description="访问数据面板菜单的权限"
         ),
         PermissionCreate(
             name="数据洞察",
             code=PermissionCode.MENU_INSIGHTS,
             permission_type=PermissionType.MENU,
+            category=PermissionCategory.MENU_VISIBILITY,
             description="访问数据洞察菜单的权限"
         ),
         PermissionCreate(
             name="行程规划",
             code=PermissionCode.MENU_ITINERARY,
             permission_type=PermissionType.MENU,
+            category=PermissionCategory.MENU_VISIBILITY,
             description="访问行程规划菜单的权限"
         ),
         PermissionCreate(
             name="个人中心",
             code=PermissionCode.MENU_PROFILE,
             permission_type=PermissionType.MENU,
+            category=PermissionCategory.MENU_VISIBILITY,
             description="访问个人中心菜单的权限"
         ),
         PermissionCreate(
             name="租户管理",
             code=PermissionCode.MENU_TENANTS,
             permission_type=PermissionType.MENU,
+            category=PermissionCategory.MENU_VISIBILITY,
             description="访问租户管理菜单的权限"
         ),
         PermissionCreate(
             name="角色管理",
             code=PermissionCode.MENU_ROLES,
             permission_type=PermissionType.MENU,
+            category=PermissionCategory.MENU_VISIBILITY,
             description="访问角色管理菜单的权限"
         ),
         PermissionCreate(
             name="权限管理",
             code=PermissionCode.MENU_PERMISSIONS,
             permission_type=PermissionType.MENU,
+            category=PermissionCategory.MENU_VISIBILITY,
             description="访问权限管理菜单的权限"
         )
     ]
@@ -141,7 +161,7 @@ def initialize_permissions():
     for permission in default_permissions:
         if not permission_service.permission_exists_by_code(permission.code):
             created_perm = permission_service.create_permission(permission)
-            logger.info(f"[权限初始化] 创建权限: {created_perm.name} ({created_perm.code}, type: {created_perm.permission_type})")
+            logger.info(f"[权限初始化] 创建权限: {created_perm.name} ({created_perm.code}, type: {created_perm.permission_type}, category: {created_perm.category})")
 
 
 def initialize_role_permissions():
