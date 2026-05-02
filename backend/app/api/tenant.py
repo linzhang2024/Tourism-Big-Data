@@ -7,7 +7,8 @@ from app.models.tenant import (
     TenantResponse, 
     TenantUpdate, 
     TenantWithQuota,
-    QuotaUsage
+    QuotaUsage,
+    TenantRolesUpdate
 )
 from app.services.tenant_service import tenant_service
 from app.services.user_service import user_service
@@ -101,6 +102,39 @@ async def update_tenant(tenant_id: int, tenant_update: TenantUpdate):
             logger.warning(f"[租户角色授权] ⚠️ 角色列表已变更，新登录用户将使用新的权限列表")
             logger.warning(f"[租户角色授权] 移除的角色: {list(set(tenant.allowed_role_codes) - set(updated_tenant.allowed_role_codes))}")
             logger.warning(f"[租户角色授权] 新增的角色: {list(set(updated_tenant.allowed_role_codes) - set(tenant.allowed_role_codes))}")
+    
+    return updated_tenant
+
+
+@router.put("/{tenant_id}/roles", response_model=TenantResponse)
+async def update_tenant_roles(tenant_id: int, roles_update: TenantRolesUpdate):
+    logger.info("=" * 60)
+    logger.info(f"[租户角色授权API] 收到角色授权保存请求: 租户ID={tenant_id}")
+    logger.info(f"[租户角色授权API] 请求体: role_codes={roles_update.role_codes}")
+    logger.info("=" * 60)
+    
+    tenant = tenant_service.get_tenant_by_id(tenant_id)
+    if tenant is None:
+        logger.error(f"[租户角色授权API] 更新失败: 租户 ID '{tenant_id}' 不存在")
+        raise HTTPException(
+            status_code=404,
+            detail=f"租户 ID '{tenant_id}' 不存在"
+        )
+    
+    logger.info(f"[租户角色授权API] 找到租户: name='{tenant.name}', code='{tenant.code}'")
+    
+    updated_tenant = tenant_service.update_tenant_roles(tenant_id, roles_update.role_codes)
+    if updated_tenant is None:
+        logger.error(f"[租户角色授权API] 更新失败: tenant_service.update_tenant_roles 返回 None")
+        raise HTTPException(
+            status_code=500,
+            detail="更新租户角色授权失败"
+        )
+    
+    logger.info("=" * 60)
+    logger.info(f"[租户角色授权API] ✅ 角色授权保存成功: 租户ID={tenant_id}")
+    logger.info(f"[租户角色授权API] 最终允许的角色: {updated_tenant.allowed_role_codes}")
+    logger.info("=" * 60)
     
     return updated_tenant
 
