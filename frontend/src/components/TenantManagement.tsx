@@ -541,13 +541,13 @@ export const TenantManagement: React.FC = () => {
                 <table className="tenant-table">
                   <thead>
                     <tr>
-                      <th style={{ width: '80px', minWidth: '80px' }}>ID</th>
-                      <th style={{ width: '180px', minWidth: '180px' }}>租户名称</th>
-                      <th style={{ width: '120px', minWidth: '120px' }}>代码</th>
-                      <th style={{ width: '320px', minWidth: '320px' }}>资源概览</th>
-                      <th style={{ width: '100px', minWidth: '100px' }}>状态</th>
-                      <th style={{ width: '160px', minWidth: '160px' }}>创建时间</th>
-                      <th style={{ width: '100px', minWidth: '100px' }}>操作</th>
+                      <th style={{ width: '60px', minWidth: '60px' }}>ID</th>
+                      <th style={{ minWidth: '150px' }}>租户名称</th>
+                      <th style={{ minWidth: '100px' }}>代码</th>
+                      <th style={{ minWidth: '350px', width: '40%' }}>资源概览</th>
+                      <th style={{ minWidth: '80px' }}>状态</th>
+                      <th style={{ minWidth: '160px' }}>创建时间</th>
+                      <th style={{ minWidth: '90px', width: '100px' }}>操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -603,45 +603,45 @@ export const TenantManagement: React.FC = () => {
                             <td>
                               <span className="tenant-code">{tenant.code}</span>
                             </td>
-                            <td style={{ minWidth: '280px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                   <CircularProgress 
                                     percentage={itineraryPercentage} 
-                                    size={48} 
-                                    strokeWidth={5} 
+                                    size={56} 
+                                    strokeWidth={6} 
                                     label={`${Math.round(itineraryPercentage)}%`}
                                   />
-                                  <div style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.4 }}>
-                                    <div style={{ fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <div style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.5 }}>
+                                    <div style={{ fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' }}>
                                       🗺️ 行程
                                     </div>
                                     <div>
-                                      <strong style={{ color: getPercentageColor(itineraryPercentage) }}>
+                                      <strong style={{ color: getPercentageColor(itineraryPercentage), fontSize: '1rem' }}>
                                         {tenant.itinerary_used}
                                       </strong>
-                                      <span style={{ color: '#9ca3af' }}> / </span>
-                                      <span>{tenant.itinerary_limit}</span>
+                                      <span style={{ color: '#9ca3af', margin: '0 4px' }}>/</span>
+                                      <span style={{ color: '#6b7280' }}>{tenant.itinerary_limit}</span>
                                     </div>
                                   </div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                   <CircularProgress 
                                     percentage={aiPercentage} 
-                                    size={48} 
-                                    strokeWidth={5}
+                                    size={56} 
+                                    strokeWidth={6}
                                     label={`${Math.round(aiPercentage)}%`}
                                   />
-                                  <div style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.4 }}>
-                                    <div style={{ fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <div style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.5 }}>
+                                    <div style={{ fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' }}>
                                       🤖 AI
                                     </div>
                                     <div>
-                                      <strong style={{ color: getPercentageColor(aiPercentage) }}>
+                                      <strong style={{ color: getPercentageColor(aiPercentage), fontSize: '1rem' }}>
                                         {tenant.ai_calls_used}
                                       </strong>
-                                      <span style={{ color: '#9ca3af' }}> / </span>
-                                      <span>{tenant.ai_calls_limit}</span>
+                                      <span style={{ color: '#9ca3af', margin: '0 4px' }}>/</span>
+                                      <span style={{ color: '#6b7280' }}>{tenant.ai_calls_limit}</span>
                                     </div>
                                   </div>
                                 </div>
