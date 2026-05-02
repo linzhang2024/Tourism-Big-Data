@@ -61,22 +61,47 @@ async def create_tenant(tenant: TenantCreate):
 
 @router.put("/{tenant_id}", response_model=TenantResponse)
 async def update_tenant(tenant_id: int, tenant_update: TenantUpdate):
-    logger.info(f"[租户API] 更新租户: ID={tenant_id}")
+    logger.info(f"[租户API] 收到更新租户请求: ID={tenant_id}")
+    
     tenant = tenant_service.get_tenant_by_id(tenant_id)
     if tenant is None:
+        logger.error(f"[租户API] 更新租户失败: 租户 ID '{tenant_id}' 不存在")
         raise HTTPException(
             status_code=404,
             detail=f"租户 ID '{tenant_id}' 不存在"
         )
     
+    logger.info(f"[租户API] 找到租户: name='{tenant.name}', code='{tenant.code}'")
+    
+    if tenant_update.allowed_role_codes is not None:
+        logger.info(f"[租户角色授权] ⚠️ 检测到角色授权变更请求")
+        logger.info(f"[租户角色授权] 租户当前允许的角色: {tenant.allowed_role_codes}")
+        logger.info(f"[租户角色授权] 租户新允许的角色: {tenant_update.allowed_role_codes}")
+        
+        if len(tenant_update.allowed_role_codes) == 0:
+            logger.warning(f"[租户角色授权] ⚠️ 允许的角色列表为空，租户成员将只能使用默认 USER 角色权限")
+        else:
+            logger.info(f"[租户角色授权] 租户将允许 {len(tenant_update.allowed_role_codes)} 个角色: {tenant_update.allowed_role_codes}")
+    
     updated_tenant = tenant_service.update_tenant(tenant_id, tenant_update)
     if updated_tenant is None:
+        logger.error(f"[租户API] 更新租户失败: tenant_service.update_tenant 返回 None")
         raise HTTPException(
             status_code=500,
             detail="更新租户失败"
         )
     
-    logger.info(f"[租户API] 租户更新成功: ID={tenant_id}")
+    logger.info(f"[租户API] ✅ 租户更新成功: ID={tenant_id}")
+    
+    if tenant_update.allowed_role_codes is not None:
+        logger.info(f"[租户角色授权] ✅ 角色授权更新成功")
+        logger.info(f"[租户角色授权] 更新后允许的角色: {updated_tenant.allowed_role_codes}")
+        
+        if tenant.allowed_role_codes != updated_tenant.allowed_role_codes:
+            logger.warning(f"[租户角色授权] ⚠️ 角色列表已变更，新登录用户将使用新的权限列表")
+            logger.warning(f"[租户角色授权] 移除的角色: {list(set(tenant.allowed_role_codes) - set(updated_tenant.allowed_role_codes))}")
+            logger.warning(f"[租户角色授权] 新增的角色: {list(set(updated_tenant.allowed_role_codes) - set(tenant.allowed_role_codes))}")
+    
     return updated_tenant
 
 

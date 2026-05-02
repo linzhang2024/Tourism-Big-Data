@@ -34,19 +34,49 @@ class LoginErrorDetail(BaseModel):
 
 
 def get_user_permissions(role_code: str, tenant_id: Optional[int] = None) -> list:
+    logger.info(f"[权限获取] 开始获取权限: role_code='{role_code}', tenant_id={tenant_id}")
+    
     if tenant_id:
         tenant = tenant_service.get_tenant_by_id(tenant_id)
-        if tenant and tenant.allowed_role_codes:
-            if role_code not in tenant.allowed_role_codes:
-                logger.warning(f"[权限获取] 用户角色 '{role_code}' 不在租户允许的角色列表中: {tenant.allowed_role_codes}")
-                base_role = role_service.get_role_by_code("USER")
-                if base_role:
-                    return [p.code for p in base_role.permissions]
-                return []
+        if tenant:
+            logger.info(f"[权限获取] 找到租户: {tenant.name} (代码: {tenant.code}), allowed_role_codes={tenant.allowed_role_codes}")
+            
+            # 关键修复：检查 allowed_role_codes is not None 而不是布尔值
+            # 空列表 [] 表示租户配置了允许角色列表但没有选择任何角色
+            if tenant.allowed_role_codes is not None:
+                if len(tenant.allowed_role_codes) == 0:
+                    logger.warning(f"[权限获取] 租户 '{tenant.name}' 的 allowed_role_codes 为空列表，将使用默认 USER 角色权限")
+                    base_role = role_service.get_role_by_code("USER")
+                    if base_role:
+                        permissions = [p.code for p in base_role.permissions]
+                        logger.info(f"[权限获取] 空角色列表降级成功，使用 USER 角色权限: {permissions}")
+                        return permissions
+                    logger.error("[权限获取] 无法获取 USER 角色权限")
+                    return []
+                
+                if role_code not in tenant.allowed_role_codes:
+                    logger.warning(f"[权限获取] 用户角色 '{role_code}' 不在租户允许的角色列表 {tenant.allowed_role_codes} 中，将降级为 USER 角色权限")
+                    base_role = role_service.get_role_by_code("USER")
+                    if base_role:
+                        permissions = [p.code for p in base_role.permissions]
+                        logger.info(f"[权限获取] 角色降级成功，使用 USER 角色权限: {permissions}")
+                        return permissions
+                    logger.error("[权限获取] 无法获取 USER 角色权限")
+                    return []
+                else:
+                    logger.info(f"[权限获取] 用户角色 '{role_code}' 在租户允许列表中，将使用原角色权限")
+            else:
+                logger.info(f"[权限获取] 租户 '{tenant.name}' 未配置 allowed_role_codes，将直接使用原角色权限")
+        else:
+            logger.warning(f"[权限获取] 未找到租户 ID={tenant_id}，将直接使用原角色权限")
     
     role = role_service.get_role_by_code(role_code)
     if role:
-        return [p.code for p in role.permissions]
+        permissions = [p.code for p in role.permissions]
+        logger.info(f"[权限获取] 使用角色 '{role_code}' 的权限: {permissions}")
+        return permissions
+    
+    logger.error(f"[权限获取] 未找到角色 '{role_code}'")
     return []
 
 

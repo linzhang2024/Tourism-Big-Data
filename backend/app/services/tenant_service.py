@@ -32,7 +32,7 @@ class TenantService:
             is_active=True,
             itinerary_used=0,
             ai_calls_used=0,
-            allowed_role_codes=tenant_create.allowed_role_codes or []
+            allowed_role_codes=tenant_create.allowed_role_codes
         )
         self.tenants.append(tenant)
         self.tenant_usage[self.next_id] = {
