@@ -370,26 +370,37 @@
   overflow-x: auto;
 }
 
-.role-table {
+.role-table,
+.tenant-table {
   width: 100%;
   border-collapse: collapse;
 }
 
 .role-table th,
-.role-table td {
+.role-table td,
+.tenant-table th,
+.tenant-table td {
   padding: 1rem;
   text-align: left;
   border-bottom: 1px solid #e5e7eb;
+  vertical-align: middle;
 }
 
-.role-table th {
+.role-table th,
+.tenant-table th {
   background-color: #f9fafb;
   font-weight: 600;
   color: #374151;
+  white-space: nowrap;
 }
 
-.role-table tr:hover {
+.role-table tr:hover,
+.tenant-table tr:hover {
   background-color: #f9fafb;
+}
+
+.tenant-table td {
+  line-height: 1.6;
 }
 
 .role-name {
