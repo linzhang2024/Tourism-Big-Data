@@ -1,9 +1,76 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota, User, RoleResponse, PermissionCategory, PermissionResponse } from '../types';
 import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota, getPendingUsers, getRejectedUsers, approveUser, rejectUser, getRoles } from '../api';
 import { useTenant } from '../contexts/TenantContext';
 
 type TabType = 'tenants' | 'pending' | 'rejected';
+
+const getPercentageColor = (percentage: number) => {
+  if (percentage >= 90) return '#ef4444';
+  if (percentage >= 70) return '#f59e0b';
+  return '#10b981';
+};
+
+const CircularProgress: React.FC<{
+  percentage: number;
+  size?: number;
+  strokeWidth?: number;
+  showLabel?: boolean;
+  label?: string;
+}> = ({ percentage, size = 48, strokeWidth = 6, showLabel = true, label }) => {
+  const color = getPercentageColor(percentage);
+  const displayPercentage = Math.min(percentage, 100);
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (displayPercentage / 100) * circumference;
+
+  return (
+    <div style={{ position: 'relative', width: size, height: size, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#e5e7eb"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+        />
+      </svg>
+      {showLabel && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '0.6rem',
+          fontWeight: 700,
+          color: color
+        }}>
+          {label || `${displayPercentage.toFixed(0)}%`}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const CATEGORY_ICONS: Record<PermissionCategory, string> = {
   '系统管理': '⚙️',
@@ -43,6 +110,7 @@ export const TenantManagement: React.FC = () => {
   const [loadingRoles, setLoadingRoles] = useState(false);
   
   const [expandedRoleCodes, setExpandedRoleCodes] = useState<Set<string>>(new Set());
+  const [expandedMenuId, setExpandedMenuId] = useState<number | null>(null);
   
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
@@ -136,6 +204,16 @@ export const TenantManagement: React.FC = () => {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    const handleClickOutside = (_e: MouseEvent) => {
+      if (expandedMenuId !== null) {
+        setExpandedMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [expandedMenuId]);
+
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     setError(null);
@@ -158,8 +236,9 @@ export const TenantManagement: React.FC = () => {
   };
 
   const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, type } = e.target;
     if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
       setEditFormData(prev => ({ ...prev, [name]: checked }));
     } else {
       setEditFormData(prev => ({ 
@@ -206,7 +285,14 @@ export const TenantManagement: React.FC = () => {
       await updateTenant(selectedTenant.id, editFormData);
       setShowEditModal(false);
       
-      fetchTenants();
+      await fetchTenants();
+      
+      try {
+        const updatedDetail = await getTenantById(selectedTenant.id);
+        setSelectedTenant(updatedDetail);
+      } catch (err) {
+        console.error('获取更新后的租户详情失败:', err);
+      }
       
       if (currentTenant && selectedTenant.id === currentTenant.id) {
         console.log('[TenantManagement] 检测到修改的是当前登录租户，刷新全局租户信息');
@@ -327,12 +413,6 @@ export const TenantManagement: React.FC = () => {
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleString('zh-CN');
-  };
-
-  const getPercentageColor = (percentage: number) => {
-    if (percentage >= 90) return '#ef4444';
-    if (percentage >= 70) return '#f59e0b';
-    return '#10b981';
   };
 
   const isCurrentTenant = (tenant: Tenant) => {
@@ -464,8 +544,7 @@ export const TenantManagement: React.FC = () => {
                       <th>ID</th>
                       <th>租户名称</th>
                       <th>代码</th>
-                      <th>行程配额</th>
-                      <th>AI配额</th>
+                      <th>资源概览</th>
                       <th>状态</th>
                       <th>创建时间</th>
                       <th>操作</th>
@@ -474,161 +553,230 @@ export const TenantManagement: React.FC = () => {
                   <tbody>
                     {tenants.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="empty-row">
+                        <td colSpan={7} className="empty-row">
                           暂无租户数据
                         </td>
                       </tr>
                     ) : (
-                      tenants.map(tenant => (
-                        <tr 
-                          key={tenant.id}
-                          style={isCurrentTenant(tenant) ? {
-                            background: 'linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
-                            borderLeft: '3px solid #667eea'
-                          } : {}}
-                        >
-                          <td>
-                            {tenant.id}
-                            {isCurrentTenant(tenant) && (
-                              <span style={{
-                                marginLeft: '8px',
-                                padding: '2px 8px',
-                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                color: 'white',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                fontWeight: 600
-                              }}>
-                                当前租户
-                              </span>
-                            )}
-                          </td>
-                          <td className="tenant-name">
-                            {tenant.logo_url ? (
-                              <img 
-                                src={tenant.logo_url} 
-                                alt={tenant.name}
-                                style={{ width: '24px', height: '24px', marginRight: '8px', borderRadius: '4px' }}
-                              />
-                            ) : null}
-                            {tenant.name}
-                          </td>
-                          <td>
-                            <span className="tenant-code">{tenant.code}</span>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ width: '80px', height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
-                                <div 
-                                  style={{ 
-                                    height: '100%', 
-                                    background: tenant.itinerary_limit > 0 
-                                      ? getPercentageColor((tenant.itinerary_used / tenant.itinerary_limit) * 100)
-                                      : '#10b981',
-                                    width: `${tenant.itinerary_limit > 0 
-                                      ? Math.min((tenant.itinerary_used / tenant.itinerary_limit) * 100, 100)
-                                      : 0}%`,
-                                    transition: 'width 0.3s'
-                                  }}
-                                />
-                              </div>
-                              <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                                {tenant.itinerary_used}/{tenant.itinerary_limit}
-                              </span>
-                            </div>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ width: '80px', height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
-                                <div 
-                                  style={{ 
-                                    height: '100%', 
-                                    background: tenant.ai_calls_limit > 0 
-                                      ? getPercentageColor((tenant.ai_calls_used / tenant.ai_calls_limit) * 100)
-                                      : '#10b981',
-                                    width: `${tenant.ai_calls_limit > 0 
-                                      ? Math.min((tenant.ai_calls_used / tenant.ai_calls_limit) * 100, 100)
-                                      : 0}%`,
-                                    transition: 'width 0.3s'
-                                  }}
-                                />
-                              </div>
-                              <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                                {tenant.ai_calls_used}/{tenant.ai_calls_limit}
-                              </span>
-                            </div>
-                          </td>
-                          <td>
-                            <span 
-                              style={{ 
-                                padding: '4px 12px', 
-                                borderRadius: '9999px',
-                                fontSize: '0.875rem',
-                                fontWeight: 500,
-                                background: tenant.is_active ? '#d1fae5' : '#fee2e2',
-                                color: tenant.is_active ? '#065f46' : '#dc2626'
-                              }}
-                            >
-                              {tenant.is_active ? '✓ 激活' : '✗ 停用'}
-                            </span>
-                          </td>
-                          <td className="date-cell">{formatDate(tenant.created_at)}</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button
-                                type="button"
-                                className="view-btn"
-                                onClick={() => handleOpenDetailModal(tenant)}
-                                style={{
-                                  padding: '4px 8px',
-                                  background: '#dbeafe',
-                                  color: '#1d4ed8',
-                                  border: 'none',
+                      tenants.map(tenant => {
+                        const itineraryPercentage = tenant.itinerary_limit > 0 
+                          ? Math.min((tenant.itinerary_used / tenant.itinerary_limit) * 100, 100) 
+                          : 0;
+                        const aiPercentage = tenant.ai_calls_limit > 0 
+                          ? Math.min((tenant.ai_calls_used / tenant.ai_calls_limit) * 100, 100) 
+                          : 0;
+                        
+                        return (
+                          <tr 
+                            key={tenant.id}
+                            style={isCurrentTenant(tenant) ? {
+                              background: 'linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
+                              borderLeft: '3px solid #667eea'
+                            } : {}}
+                          >
+                            <td>
+                              {tenant.id}
+                              {isCurrentTenant(tenant) && (
+                                <span style={{
+                                  marginLeft: '8px',
+                                  padding: '2px 8px',
+                                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                  color: 'white',
                                   borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  fontSize: '0.875rem'
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600
+                                }}>
+                                  当前租户
+                                </span>
+                              )}
+                            </td>
+                            <td className="tenant-name">
+                              {tenant.logo_url ? (
+                                <img 
+                                  src={tenant.logo_url} 
+                                  alt={tenant.name}
+                                  style={{ width: '24px', height: '24px', marginRight: '8px', borderRadius: '4px' }}
+                                />
+                              ) : null}
+                              {tenant.name}
+                            </td>
+                            <td>
+                              <span className="tenant-code">{tenant.code}</span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <CircularProgress percentage={itineraryPercentage} size={36} strokeWidth={4} />
+                                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                    <div style={{ fontWeight: 500, color: '#374151' }}>🗺️ 行程</div>
+                                    <div>{tenant.itinerary_used}/{tenant.itinerary_limit}</div>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <CircularProgress percentage={aiPercentage} size={36} strokeWidth={4} />
+                                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                    <div style={{ fontWeight: 500, color: '#374151' }}>🤖 AI</div>
+                                    <div>{tenant.ai_calls_used}/{tenant.ai_calls_limit}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <span 
+                                style={{ 
+                                  padding: '4px 12px', 
+                                  borderRadius: '9999px',
+                                  fontSize: '0.875rem',
+                                  fontWeight: 500,
+                                  background: tenant.is_active ? '#d1fae5' : '#fee2e2',
+                                  color: tenant.is_active ? '#065f46' : '#dc2626'
                                 }}
                               >
-                                👁️ 查看
-                              </button>
-                              <button
-                                type="button"
-                                className="edit-btn"
-                                onClick={() => handleOpenEditModal(tenant)}
-                                style={{
-                                  padding: '4px 8px',
-                                  background: '#fef3c7',
-                                  color: '#92400e',
-                                  border: 'none',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  fontSize: '0.875rem'
-                                }}
-                              >
-                                ✏️ 编辑
-                              </button>
-                              {!isCurrentTenant(tenant) && (
+                                {tenant.is_active ? '✓ 激活' : '✗ 停用'}
+                              </span>
+                            </td>
+                            <td className="date-cell">{formatDate(tenant.created_at)}</td>
+                            <td>
+                              <div style={{ position: 'relative' }}>
                                 <button
                                   type="button"
-                                  className="delete-btn"
-                                  onClick={() => handleDeleteTenant(tenant)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedMenuId(expandedMenuId === tenant.id ? null : tenant.id);
+                                  }}
                                   style={{
-                                    padding: '4px 8px',
-                                    background: '#fee2e2',
-                                    color: '#dc2626',
-                                    border: 'none',
-                                    borderRadius: '4px',
+                                    padding: '6px 10px',
+                                    background: '#f3f4f6',
+                                    color: '#374151',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '6px',
                                     cursor: 'pointer',
-                                    fontSize: '0.875rem'
+                                    fontSize: '0.875rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    transition: 'all 0.2s'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = '#e5e7eb';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = '#f3f4f6';
                                   }}
                                 >
-                                  🗑️ 删除
+                                  ⋮ 更多
                                 </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                                {expandedMenuId === tenant.id && (
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    right: 0,
+                                    marginTop: '4px',
+                                    background: 'white',
+                                    border: '1px solid #e5e7eb',
+                                    borderRadius: '8px',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                    zIndex: 100,
+                                    minWidth: '120px',
+                                    overflow: 'hidden'
+                                  }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setExpandedMenuId(null);
+                                        handleOpenDetailModal(tenant);
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        padding: '10px 16px',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        color: '#374151',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        transition: 'background 0.2s'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = '#f3f4f6';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'transparent';
+                                      }}
+                                    >
+                                      👁️ 查看
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setExpandedMenuId(null);
+                                        handleOpenEditModal(tenant);
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        padding: '10px 16px',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        color: '#374151',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        transition: 'background 0.2s'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = '#f3f4f6';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'transparent';
+                                      }}
+                                    >
+                                      ✏️ 编辑
+                                    </button>
+                                    {!isCurrentTenant(tenant) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setExpandedMenuId(null);
+                                          handleDeleteTenant(tenant);
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          padding: '10px 16px',
+                                          background: 'transparent',
+                                          border: 'none',
+                                          textAlign: 'left',
+                                          cursor: 'pointer',
+                                          fontSize: '0.875rem',
+                                          color: '#dc2626',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '8px',
+                                          transition: 'background 0.2s',
+                                          borderTop: '1px solid #f3f4f6'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.background = '#fef2f2';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.background = 'transparent';
+                                        }}
+                                      >
+                                        🗑️ 删除
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -958,7 +1106,7 @@ export const TenantManagement: React.FC = () => {
 
       {showEditModal && selectedTenant && (
         <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '900px', width: '90vw' }}>
             <div className="modal-header">
               <h3>编辑租户 - {selectedTenant.name}</h3>
               {isCurrentTenant(selectedTenant) && (
@@ -1001,353 +1149,401 @@ export const TenantManagement: React.FC = () => {
             )}
 
             <form onSubmit={handleEditSubmit}>
-              <div className="form-group">
-                <label htmlFor="edit-name">租户名称</label>
-                <input
-                  id="edit-name"
-                  name="name"
-                  type="text"
-                  value={editFormData.name || ''}
-                  onChange={handleEditInputChange}
-                  placeholder="例如：公司A"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="edit-description">描述</label>
-                <textarea
-                  id="edit-description"
-                  name="description"
-                  value={editFormData.description || ''}
-                  onChange={handleEditInputChange}
-                  placeholder="租户详细描述"
-                  rows={3}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="edit-logo">Logo URL</label>
-                <input
-                  id="edit-logo"
-                  name="logo_url"
-                  type="text"
-                  value={editFormData.logo_url || ''}
-                  onChange={handleEditInputChange}
-                  placeholder="https://example.com/logo.png"
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                  <label htmlFor="edit-itinerary-limit">行程数量上限</label>
-                  <input
-                    id="edit-itinerary-limit"
-                    name="itinerary_limit"
-                    type="number"
-                    min="0"
-                    value={editFormData.itinerary_limit || 0}
-                    onChange={handleEditInputChange}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="edit-ai-limit">AI调用次数上限</label>
-                  <input
-                    id="edit-ai-limit"
-                    name="ai_calls_limit"
-                    type="number"
-                    min="0"
-                    value={editFormData.ai_calls_limit || 0}
-                    onChange={handleEditInputChange}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    name="is_active"
-                    checked={editFormData.is_active ?? true}
-                    onChange={handleEditInputChange}
-                  />
-                  <span>启用租户</span>
-                </label>
-              </div>
-
-              <div className="form-group">
-                <label>允许的角色</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                 <div style={{ 
-                  background: '#f9fafb', 
-                  padding: '1rem', 
-                  borderRadius: '8px',
-                  border: '1px solid #e5e7eb'
+                  borderRight: '1px solid #e5e7eb', 
+                  paddingRight: '1.5rem'
                 }}>
-                  {loadingRoles ? (
-                    <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>加载角色列表中...</div>
-                  ) : roles.length === 0 ? (
-                    <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>暂无角色数据</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {roles.map(role => {
-                        const isSelected = (editFormData.allowed_role_codes || []).includes(role.code);
-                        const isExpanded = expandedRoleCodes.has(role.code);
-                        const groupedPerms = groupPermissionsByCategory(role.permissions);
-                        
-                        const toggleExpand = (e: React.MouseEvent) => {
-                          e.stopPropagation();
-                          setExpandedRoleCodes(prev => {
-                            const newSet = new Set(prev);
-                            if (newSet.has(role.code)) {
-                              newSet.delete(role.code);
-                            } else {
-                              newSet.add(role.code);
-                            }
-                            return newSet;
-                          });
-                        };
-                        
-                        return (
-                          <div
-                            key={role.id}
-                            style={{
-                              border: isSelected 
-                                ? '1px solid #667eea' 
-                                : '1px solid #e5e7eb',
-                              borderRadius: '8px',
-                              overflow: 'hidden',
-                              background: isSelected 
-                                ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)' 
-                                : 'white',
-                              transition: 'all 0.2s',
-                            }}
-                          >
+                  <h4 style={{ 
+                    margin: '0 0 1rem', 
+                    color: '#374151', 
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    📋 基础信息
+                  </h4>
+                  
+                  <div className="form-group">
+                    <label htmlFor="edit-name">租户名称</label>
+                    <input
+                      id="edit-name"
+                      name="name"
+                      type="text"
+                      value={editFormData.name || ''}
+                      onChange={handleEditInputChange}
+                      placeholder="例如：公司A"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="edit-description">描述</label>
+                    <textarea
+                      id="edit-description"
+                      name="description"
+                      value={editFormData.description || ''}
+                      onChange={handleEditInputChange}
+                      placeholder="租户详细描述"
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="edit-logo">Logo URL</label>
+                    <input
+                      id="edit-logo"
+                      name="logo_url"
+                      type="text"
+                      value={editFormData.logo_url || ''}
+                      onChange={handleEditInputChange}
+                      placeholder="https://example.com/logo.png"
+                    />
+                  </div>
+
+                  <h4 style={{ 
+                    margin: '1.5rem 0 1rem', 
+                    color: '#374151', 
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    📊 配额设置
+                  </h4>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group">
+                      <label htmlFor="edit-itinerary-limit">行程数量上限</label>
+                      <input
+                        id="edit-itinerary-limit"
+                        name="itinerary_limit"
+                        type="number"
+                        min="0"
+                        value={editFormData.itinerary_limit || 0}
+                        onChange={handleEditInputChange}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="edit-ai-limit">AI调用次数上限</label>
+                      <input
+                        id="edit-ai-limit"
+                        name="ai_calls_limit"
+                        type="number"
+                        min="0"
+                        value={editFormData.ai_calls_limit || 0}
+                        onChange={handleEditInputChange}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        name="is_active"
+                        checked={editFormData.is_active ?? true}
+                        onChange={handleEditInputChange}
+                      />
+                      <span>启用租户</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 style={{ 
+                    margin: '0 0 1rem', 
+                    color: '#374151', 
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    🎭 角色选择
+                  </h4>
+                  
+                  <div style={{ 
+                    background: '#f9fafb', 
+                    padding: '1rem', 
+                    borderRadius: '8px',
+                    border: '1px solid #e5e7eb',
+                    maxHeight: '500px',
+                    overflowY: 'auto'
+                  }}>
+                    {loadingRoles ? (
+                      <div style={{ color: '#6b7280', fontSize: '0.875rem', textAlign: 'center', padding: '2rem' }}>
+                        加载角色列表中...
+                      </div>
+                    ) : roles.length === 0 ? (
+                      <div style={{ color: '#6b7280', fontSize: '0.875rem', textAlign: 'center', padding: '2rem' }}>
+                        暂无角色数据
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {roles.map(role => {
+                          const isSelected = (editFormData.allowed_role_codes || []).includes(role.code);
+                          const isExpanded = expandedRoleCodes.has(role.code);
+                          const groupedPerms = groupPermissionsByCategory(role.permissions);
+                          
+                          const toggleExpand = (e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            setExpandedRoleCodes(prev => {
+                              const newSet = new Set(prev);
+                              if (newSet.has(role.code)) {
+                                newSet.delete(role.code);
+                              } else {
+                                newSet.add(role.code);
+                              }
+                              return newSet;
+                            });
+                          };
+                          
+                          return (
                             <div
+                              key={role.id}
                               style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                padding: '10px 12px',
-                                cursor: 'pointer',
+                                border: isSelected 
+                                  ? '1px solid #667eea' 
+                                  : '1px solid #e5e7eb',
+                                borderRadius: '8px',
+                                overflow: 'hidden',
+                                background: isSelected 
+                                  ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)' 
+                                  : 'white',
+                                transition: 'all 0.2s',
                               }}
-                              onClick={toggleExpand}
                             >
-                              <label
-                                onClick={(e) => e.stopPropagation()}
+                              <div
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: '10px',
+                                  padding: '10px 12px',
                                   cursor: 'pointer',
-                                  flex: 1,
                                 }}
+                                onClick={toggleExpand}
                               >
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={(e) => {
-                                    const currentRoles = editFormData.allowed_role_codes || [];
-                                    if (e.target.checked) {
-                                      setEditFormData(prev => ({
-                                        ...prev,
-                                        allowed_role_codes: [...currentRoles, role.code]
-                                      }));
-                                    } else {
-                                      setEditFormData(prev => ({
-                                        ...prev,
-                                        allowed_role_codes: currentRoles.filter(c => c !== role.code)
-                                      }));
-                                    }
-                                  }}
-                                  style={{ 
-                                    width: '16px', 
-                                    height: '16px', 
+                                <label
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
                                     cursor: 'pointer',
-                                    margin: 0,
+                                    flex: 1,
                                   }}
-                                />
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ 
-                                    fontWeight: 600, 
-                                    fontSize: '0.95rem', 
-                                    color: isSelected ? '#4c51bf' : '#374151',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                  }}>
-                                    {role.name}
-                                    <span style={{
-                                      fontSize: '0.7rem',
-                                      fontWeight: 500,
-                                      color: isSelected ? '#667eea' : '#6b7280',
-                                      background: isSelected 
-                                        ? 'rgba(102, 126, 234, 0.1)' 
-                                        : '#e5e7eb',
-                                      padding: '2px 8px',
-                                      borderRadius: '9999px',
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      const currentRoles = editFormData.allowed_role_codes || [];
+                                      if (e.target.checked) {
+                                        setEditFormData(prev => ({
+                                          ...prev,
+                                          allowed_role_codes: [...currentRoles, role.code]
+                                        }));
+                                      } else {
+                                        setEditFormData(prev => ({
+                                          ...prev,
+                                          allowed_role_codes: currentRoles.filter(c => c !== role.code)
+                                        }));
+                                      }
+                                    }}
+                                    style={{ 
+                                      width: '16px', 
+                                      height: '16px', 
+                                      cursor: 'pointer',
+                                      margin: 0,
+                                    }}
+                                  />
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ 
+                                      fontWeight: 600, 
+                                      fontSize: '0.95rem', 
+                                      color: isSelected ? '#4c51bf' : '#374151',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
                                     }}>
-                                      {role.code}
-                                    </span>
-                                  </div>
-                                  <div style={{ 
-                                    fontSize: '0.75rem', 
-                                    color: '#6b7280',
-                                    marginTop: '2px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                  }}>
-                                    <span>共 {role.permissions.length} 个权限</span>
-                                    <span style={{ color: '#d1d5db' }}>|</span>
-                                    <span>
-                                      {CATEGORY_ORDER
-                                        .filter(cat => groupedPerms[cat]?.length > 0)
-                                        .map(cat => `${CATEGORY_ICONS[cat]} ${groupedPerms[cat].length}`)
-                                        .join('  ')}
-                                    </span>
-                                  </div>
-                                </div>
-                              </label>
-                              <span style={{
-                                transition: 'transform 0.3s',
-                                transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                                color: '#6b7280',
-                                fontSize: '1rem',
-                                padding: '4px',
-                              }}>
-                                ▼
-                              </span>
-                            </div>
-                            
-                            {isExpanded && (
-                              <div style={{
-                                padding: '0 12px 12px',
-                                borderTop: '1px solid #e5e7eb',
-                                background: 'white',
-                              }}>
-                                <div style={{ 
-                                  display: 'flex', 
-                                  flexDirection: 'column', 
-                                  gap: '12px',
-                                  marginTop: '12px',
-                                }}>
-                                  {CATEGORY_ORDER.map(category => {
-                                    const categoryPerms = groupedPerms[category] || [];
-                                    if (categoryPerms.length === 0) return null;
-                                    
-                                    return (
-                                      <div key={category}>
-                                        <div style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '6px',
-                                          marginBottom: '6px',
-                                          paddingLeft: '4px',
-                                        }}>
-                                          <span style={{ fontSize: '0.9rem' }}>
-                                            {CATEGORY_ICONS[category]}
-                                          </span>
-                                          <span style={{
-                                            fontWeight: 600,
-                                            fontSize: '0.8rem',
-                                            color: '#374151',
-                                          }}>
-                                            {category}
-                                          </span>
-                                          <span style={{
-                                            fontSize: '0.7rem',
-                                            color: '#9ca3af',
-                                            background: '#f3f4f6',
-                                            padding: '1px 6px',
-                                            borderRadius: '4px',
-                                          }}>
-                                            {categoryPerms.length}
-                                          </span>
-                                        </div>
-                                        <div style={{
-                                          display: 'flex',
-                                          flexWrap: 'wrap',
-                                          gap: '6px',
-                                          paddingLeft: '28px',
-                                        }}>
-                                          {categoryPerms.map(perm => (
-                                            <div
-                                              key={perm.id}
-                                              style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '4px',
-                                                padding: '4px 10px',
-                                                background: '#f9fafb',
-                                                border: '1px solid #e5e7eb',
-                                                borderRadius: '4px',
-                                                fontSize: '0.75rem',
-                                              }}
-                                            >
-                                              <span style={{
-                                                fontWeight: 500,
-                                                color: '#374151',
-                                              }}>
-                                                {perm.name}
-                                              </span>
-                                              <span style={{
-                                                fontSize: '0.65rem',
-                                                color: '#6b7280',
-                                                background: perm.permission_type === 'menu' 
-                                                  ? '#dbeafe' 
-                                                  : '#dcfce7',
-                                                padding: '1px 4px',
-                                                borderRadius: '3px',
-                                              }}>
-                                                {perm.permission_type === 'menu' ? '菜单' : '数据'}
-                                              </span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                  
-                                  {role.description && (
-                                    <div style={{
-                                      marginTop: '8px',
-                                      padding: '8px 12px',
-                                      background: '#f9fafb',
-                                      borderRadius: '6px',
-                                      fontSize: '0.75rem',
-                                      color: '#6b7280',
-                                    }}>
-                                      <strong>角色说明：</strong> {role.description}
+                                      {role.name}
+                                      <span style={{
+                                        fontSize: '0.7rem',
+                                        fontWeight: 500,
+                                        color: isSelected ? '#667eea' : '#6b7280',
+                                        background: isSelected 
+                                          ? 'rgba(102, 126, 234, 0.1)' 
+                                          : '#e5e7eb',
+                                        padding: '2px 8px',
+                                        borderRadius: '9999px',
+                                      }}>
+                                        {role.code}
+                                      </span>
                                     </div>
-                                  )}
-                                </div>
+                                    <div style={{ 
+                                      fontSize: '0.75rem', 
+                                      color: '#6b7280',
+                                      marginTop: '2px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                    }}>
+                                      <span>共 {role.permissions.length} 个权限</span>
+                                      <span style={{ color: '#d1d5db' }}>|</span>
+                                      <span>
+                                        {CATEGORY_ORDER
+                                          .filter(cat => groupedPerms[cat]?.length > 0)
+                                          .map(cat => `${CATEGORY_ICONS[cat]} ${groupedPerms[cat].length}`)
+                                          .join('  ')}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </label>
+                                <span style={{
+                                  transition: 'transform 0.3s',
+                                  transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                  color: '#6b7280',
+                                  fontSize: '1rem',
+                                  padding: '4px',
+                                }}>
+                                  ▼
+                                </span>
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <div style={{ 
-                    marginTop: '1rem', 
-                    fontSize: '0.75rem', 
-                    color: '#6b7280',
-                    paddingTop: '0.75rem',
-                    borderTop: '1px solid #e5e7eb'
-                  }}>
-                    <strong>💡 提示：</strong>
-                    <span style={{ marginLeft: '4px' }}>
-                      勾选的角色表示该租户下的成员可以使用的角色。点击角色卡片右侧的箭头可展开查看该角色包含的权限及分类。租户成员登录时，系统将根据其角色和租户配置动态下发权限。
-                    </span>
-                    {(!editFormData.allowed_role_codes || editFormData.allowed_role_codes.length === 0) && (
-                      <span style={{ color: '#ef4444', display: 'block', marginTop: '4px', fontWeight: 500 }}>
-                        ⚠️ 未选择任何角色时，租户成员将只能使用默认的USER角色权限。
-                      </span>
+                              
+                              {isExpanded && (
+                                <div style={{
+                                  padding: '0 12px 12px',
+                                  borderTop: '1px solid #e5e7eb',
+                                  background: 'white',
+                                }}>
+                                  <div style={{ 
+                                    display: 'flex', 
+                                    flexDirection: 'column', 
+                                    gap: '12px',
+                                    marginTop: '12px',
+                                  }}>
+                                    {CATEGORY_ORDER.map(category => {
+                                      const categoryPerms = groupedPerms[category] || [];
+                                      if (categoryPerms.length === 0) return null;
+                                      
+                                      return (
+                                        <div key={category}>
+                                          <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            marginBottom: '6px',
+                                            paddingLeft: '4px',
+                                          }}>
+                                            <span style={{ fontSize: '0.9rem' }}>
+                                              {CATEGORY_ICONS[category]}
+                                            </span>
+                                            <span style={{
+                                              fontWeight: 600,
+                                              fontSize: '0.8rem',
+                                              color: '#374151',
+                                            }}>
+                                              {category}
+                                            </span>
+                                            <span style={{
+                                              fontSize: '0.7rem',
+                                              color: '#9ca3af',
+                                              background: '#f3f4f6',
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                            }}>
+                                              {categoryPerms.length}
+                                            </span>
+                                          </div>
+                                          <div style={{
+                                            display: 'flex',
+                                            flexWrap: 'wrap',
+                                            gap: '6px',
+                                            paddingLeft: '28px',
+                                          }}>
+                                            {categoryPerms.map(perm => (
+                                              <div
+                                                key={perm.id}
+                                                style={{
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  gap: '4px',
+                                                  padding: '4px 10px',
+                                                  background: '#f9fafb',
+                                                  border: '1px solid #e5e7eb',
+                                                  borderRadius: '4px',
+                                                  fontSize: '0.75rem',
+                                                }}
+                                              >
+                                                <span style={{
+                                                  fontWeight: 500,
+                                                  color: '#374151',
+                                                }}>
+                                                  {perm.name}
+                                                </span>
+                                                <span style={{
+                                                  fontSize: '0.65rem',
+                                                  color: '#6b7280',
+                                                  background: perm.permission_type === 'menu' 
+                                                    ? '#dbeafe' 
+                                                    : '#dcfce7',
+                                                  padding: '1px 4px',
+                                                  borderRadius: '3px',
+                                                }}>
+                                                  {perm.permission_type === 'menu' ? '菜单' : '数据'}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                    
+                                    {role.description && (
+                                      <div style={{
+                                        marginTop: '8px',
+                                        padding: '8px 12px',
+                                        background: '#f9fafb',
+                                        borderRadius: '6px',
+                                        fontSize: '0.75rem',
+                                        color: '#6b7280',
+                                      }}>
+                                        <strong>角色说明：</strong> {role.description}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
+                    <div style={{ 
+                      marginTop: '1rem', 
+                      fontSize: '0.75rem', 
+                      color: '#6b7280',
+                      paddingTop: '0.75rem',
+                      borderTop: '1px solid #e5e7eb'
+                    }}>
+                      <strong>💡 提示：</strong>
+                      <span style={{ marginLeft: '4px' }}>
+                        勾选的角色表示该租户下的成员可以使用的角色。点击角色卡片右侧的箭头可展开查看该角色包含的权限及分类。
+                      </span>
+                      {(!editFormData.allowed_role_codes || editFormData.allowed_role_codes.length === 0) && (
+                        <span style={{ color: '#ef4444', display: 'block', marginTop: '4px', fontWeight: 500 }}>
+                          ⚠️ 未选择任何角色时，租户成员将只能使用默认的USER角色权限。
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="modal-footer">
+              <div className="modal-footer" style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e5e7eb' }}>
                 <button
                   type="button"
                   className="cancel-btn"
