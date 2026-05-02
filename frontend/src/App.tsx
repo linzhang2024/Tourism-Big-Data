@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { RoleManagement } from './components/RoleManagement';
 import { PermissionManagement } from './components/PermissionManagement';
@@ -16,10 +16,23 @@ type TabType = 'dashboard' | 'insights' | 'itinerary' | 'roles' | 'permissions' 
 
 const MainApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   
   const { user, logout, hasPermission } = useAuth();
   const { currentTenant, loading: loadingTenant, refreshTenant } = useTenant();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLogout = () => {
     console.log('[MainApp] 用户点击登出按钮');
@@ -38,7 +51,31 @@ const MainApp: React.FC = () => {
     }
   };
 
-  const canManageTenants = hasPermission('sys:manage');
+  const canViewDashboard = hasPermission('menu:dashboard');
+  const canViewInsights = hasPermission('menu:insights');
+  const canViewItinerary = hasPermission('menu:itinerary');
+  const canViewProfile = hasPermission('menu:profile');
+  const canViewTenants = hasPermission('menu:tenants');
+  const canViewRoles = hasPermission('menu:roles');
+  const canViewPermissions = hasPermission('menu:permissions');
+  
+  const canAccessUserManagement = canViewTenants || canViewRoles || canViewPermissions;
+
+  const handleTabClick = (tab: TabType) => {
+    setActiveTab(tab);
+    setUserMenuOpen(false);
+  };
+
+  const isUserManagementActive = activeTab === 'tenants' || activeTab === 'roles' || activeTab === 'permissions';
+
+  const getActiveTabName = () => {
+    switch (activeTab) {
+      case 'tenants': return '租户管理';
+      case 'roles': return '角色管理';
+      case 'permissions': return '权限管理';
+      default: return '用户管理';
+    }
+  };
 
   return (
     <div className="app">
@@ -155,53 +192,129 @@ const MainApp: React.FC = () => {
         </div>
         
         <nav className="nav-tabs">
-          <button
-            className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setActiveTab('dashboard')}
-          >
-            📊 数据面板
-          </button>
-          <button
-            className={`nav-tab ${activeTab === 'insights' ? 'active' : ''}`}
-            onClick={() => setActiveTab('insights')}
-          >
-            📈 数据洞察
-          </button>
-          <button
-            className={`nav-tab ${activeTab === 'itinerary' ? 'active' : ''}`}
-            onClick={() => setActiveTab('itinerary')}
-          >
-            🗺️ 行程规划
-          </button>
-          <button
-            className={`nav-tab ${activeTab === 'profile' ? 'active' : ''}`}
-            onClick={() => setActiveTab('profile')}
-          >
-            👤 个人中心
-          </button>
-          {canManageTenants && (
+          {canViewDashboard && (
             <button
-              className={`nav-tab ${activeTab === 'roles' ? 'active' : ''}`}
-              onClick={() => setActiveTab('roles')}
+              className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+              onClick={() => handleTabClick('dashboard')}
             >
-              🎭 角色管理
+              📊 数据面板
             </button>
           )}
-          {canManageTenants && (
+          {canViewInsights && (
             <button
-              className={`nav-tab ${activeTab === 'permissions' ? 'active' : ''}`}
-              onClick={() => setActiveTab('permissions')}
+              className={`nav-tab ${activeTab === 'insights' ? 'active' : ''}`}
+              onClick={() => handleTabClick('insights')}
             >
-              🔐 权限管理
+              📈 数据洞察
             </button>
           )}
-          {canManageTenants && (
+          {canViewItinerary && (
             <button
-              className={`nav-tab ${activeTab === 'tenants' ? 'active' : ''}`}
-              onClick={() => setActiveTab('tenants')}
+              className={`nav-tab ${activeTab === 'itinerary' ? 'active' : ''}`}
+              onClick={() => handleTabClick('itinerary')}
             >
-              🏢 租户管理
+              🗺️ 行程规划
             </button>
+          )}
+          {canViewProfile && (
+            <button
+              className={`nav-tab ${activeTab === 'profile' ? 'active' : ''}`}
+              onClick={() => handleTabClick('profile')}
+            >
+              👤 个人中心
+            </button>
+          )}
+          {canAccessUserManagement && (
+            <div ref={userMenuRef} style={{ position: 'relative' }}>
+              <button
+                className={`nav-tab ${isUserManagementActive ? 'active' : ''}`}
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                👥 用户管理
+                <span style={{ fontSize: '0.7rem', transform: userMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                  ▼
+                </span>
+              </button>
+              {userMenuOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: '0',
+                  background: 'white',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  minWidth: '160px',
+                  zIndex: 100,
+                  overflow: 'hidden',
+                  marginTop: '4px'
+                }}>
+                  {canViewTenants && (
+                    <button
+                      onClick={() => handleTabClick('tenants')}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        border: 'none',
+                        background: activeTab === 'tenants' ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)' : 'transparent',
+                        color: '#374151',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: activeTab === 'tenants' ? 600 : 400,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      🏢 租户管理
+                    </button>
+                  )}
+                  {canViewRoles && (
+                    <button
+                      onClick={() => handleTabClick('roles')}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        border: 'none',
+                        background: activeTab === 'roles' ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)' : 'transparent',
+                        color: '#374151',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: activeTab === 'roles' ? 600 : 400,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      🎭 角色管理
+                    </button>
+                  )}
+                  {canViewPermissions && (
+                    <button
+                      onClick={() => handleTabClick('permissions')}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        border: 'none',
+                        background: activeTab === 'permissions' ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)' : 'transparent',
+                        color: '#374151',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: activeTab === 'permissions' ? 600 : 400,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      🔐 权限管理
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </nav>
       </header>
