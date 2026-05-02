@@ -300,6 +300,15 @@ export async function resetTenantQuota(tenantId: number): Promise<QuotaUsage> {
   return response.data;
 }
 
+export async function updateTenantRoles(tenantId: number, roleCodes: string[]): Promise<Tenant> {
+  console.log('[API] 调用 updateTenantRoles:', tenantId, '角色:', roleCodes);
+  const response = await apiAxios.put<Tenant>(`/tenants/${tenantId}/roles`, {
+    role_codes: roleCodes
+  });
+  console.log('[API] updateTenantRoles 成功:', response.data);
+  return response.data;
+}
+
 export async function register(request: RegisterRequest): Promise<User> {
   console.log('[API] 调用 register:', request.username);
   const response = await fetch(`${API_BASE_URL}/auth/register`, {

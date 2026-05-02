@@ -90,6 +90,50 @@ class TenantService:
         logger.info(f"[租户服务] 更新租户: {tenant.name} (ID: {tenant_id}, 允许角色: {tenant.allowed_role_codes})")
         return tenant
 
+    def update_tenant_roles(self, tenant_id: int, role_codes: List[str]) -> Optional[TenantResponse]:
+        logger.info(f"[租户角色授权] 开始更新租户角色授权: 租户ID={tenant_id}")
+        
+        tenant = self.get_tenant_by_id(tenant_id)
+        if tenant is None:
+            logger.error(f"[租户角色授权] 更新失败: 租户 ID '{tenant_id}' 不存在")
+            return None
+        
+        logger.info(f"[租户角色授权] 找到租户: name='{tenant.name}', code='{tenant.code}'")
+        
+        old_roles = tenant.allowed_role_codes or []
+        new_roles = role_codes
+        
+        logger.info(f"[租户角色授权] 当前允许的角色: {old_roles}")
+        logger.info(f"[租户角色授权] 新允许的角色: {new_roles}")
+        
+        removed_roles = list(set(old_roles) - set(new_roles))
+        added_roles = list(set(new_roles) - set(old_roles))
+        
+        if removed_roles:
+            logger.warning(f"[租户角色授权] ⚠️ 即将移除的角色: {removed_roles}")
+        if added_roles:
+            logger.info(f"[租户角色授权] ➕ 即将添加的角色: {added_roles}")
+        
+        if len(new_roles) == 0:
+            logger.warning(f"[租户角色授权] ⚠️ 允许的角色列表为空，租户成员将只能使用默认 USER 角色权限")
+        else:
+            logger.info(f"[租户角色授权] 租户将允许 {len(new_roles)} 个角色: {new_roles}")
+        
+        tenant.allowed_role_codes = new_roles
+        
+        logger.info(f"[租户角色授权] ✅ 角色授权更新成功")
+        logger.info(f"[租户角色授权] 更新后允许的角色: {tenant.allowed_role_codes}")
+        
+        if old_roles != new_roles:
+            logger.warning(f"[租户角色授权] ⚠️ 角色列表已变更，新登录用户将使用新的权限列表")
+            if removed_roles:
+                logger.warning(f"[租户角色授权] 已移除的角色: {removed_roles}")
+            if added_roles:
+                logger.warning(f"[租户角色授权] 已新增的角色: {added_roles}")
+        
+        logger.info(f"[租户服务] 更新租户角色: {tenant.name} (ID: {tenant_id}, 允许角色: {tenant.allowed_role_codes})")
+        return tenant
+
     def deactivate_tenant(self, tenant_id: int) -> bool:
         tenant = self.get_tenant_by_id(tenant_id)
         if tenant is None:

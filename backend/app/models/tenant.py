@@ -27,6 +27,10 @@ class TenantUpdate(BaseModel):
     allowed_role_codes: Optional[List[str]] = Field(None, description="该租户允许使用的角色代码列表")
 
 
+class TenantRolesUpdate(BaseModel):
+    role_codes: List[str] = Field(..., description="该租户允许使用的角色代码列表")
+
+
 class QuotaUsage(BaseModel):
     itinerary_used: int = Field(0, description="已使用的行程数量")
     ai_calls_used: int = Field(0, description="已使用的AI调用次数")

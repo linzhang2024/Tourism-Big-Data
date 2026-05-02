@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota, User, RoleResponse, PermissionCategory, PermissionResponse } from '../types';
-import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota, getPendingUsers, getRejectedUsers, approveUser, rejectUser, getRoles } from '../api';
+import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota, getPendingUsers, getRejectedUsers, approveUser, rejectUser, getRoles, updateTenantRoles } from '../api';
 import { useTenant } from '../contexts/TenantContext';
 
 type TabType = 'tenants' | 'pending' | 'rejected';
@@ -9,6 +9,12 @@ const getPercentageColor = (percentage: number) => {
   if (percentage >= 90) return '#ef4444';
   if (percentage >= 70) return '#f59e0b';
   return '#10b981';
+};
+
+const getResourceUsedClass = (percentage: number) => {
+  if (percentage >= 90) return 'resource-used-high';
+  if (percentage >= 70) return 'resource-used-medium';
+  return 'resource-used-low';
 };
 
 const CircularProgress: React.FC<{
@@ -282,7 +288,31 @@ export const TenantManagement: React.FC = () => {
     setSubmitting(true);
 
     try {
-      await updateTenant(selectedTenant.id, editFormData);
+      console.log('='.repeat(60));
+      console.log('[TenantManagement] 开始保存租户编辑');
+      console.log(`[TenantManagement] 租户ID: ${selectedTenant.id}, 名称: ${selectedTenant.name}`);
+      console.log(`[TenantManagement] 当前选择的角色: ${editFormData.allowed_role_codes || []}`);
+      console.log('='.repeat(60));
+      
+      const { allowed_role_codes, ...otherFields } = editFormData;
+      
+      console.log('[TenantManagement] 步骤1: 更新租户基础信息');
+      await updateTenant(selectedTenant.id, otherFields);
+      console.log('[TenantManagement] 租户基础信息更新成功');
+      
+      if (allowed_role_codes !== undefined) {
+        console.log('[TenantManagement] 步骤2: 保存角色授权');
+        console.log(`[TenantManagement] 即将保存的角色列表: ${allowed_role_codes}`);
+        console.log(`[TenantManagement] 调用专门接口: PUT /api/tenants/${selectedTenant.id}/roles`);
+        
+        await updateTenantRoles(selectedTenant.id, allowed_role_codes);
+        
+        console.log('[TenantManagement] ✅ 角色授权保存成功');
+        console.log(`[TenantManagement] 保存的角色: ${allowed_role_codes}`);
+      } else {
+        console.log('[TenantManagement] 步骤2: 跳过角色授权保存（allowed_role_codes 为 undefined）');
+      }
+      
       setShowEditModal(false);
       
       await fetchTenants();
@@ -290,6 +320,7 @@ export const TenantManagement: React.FC = () => {
       try {
         const updatedDetail = await getTenantById(selectedTenant.id);
         setSelectedTenant(updatedDetail);
+        console.log(`[TenantManagement] 更新后租户允许的角色: ${updatedDetail.allowed_role_codes}`);
       } catch (err) {
         console.error('获取更新后的租户详情失败:', err);
       }
@@ -298,7 +329,12 @@ export const TenantManagement: React.FC = () => {
         console.log('[TenantManagement] 检测到修改的是当前登录租户，刷新全局租户信息');
         await refreshTenant();
       }
+      
+      console.log('='.repeat(60));
+      console.log('[TenantManagement] ✅ 租户编辑保存完成');
+      console.log('='.repeat(60));
     } catch (err) {
+      console.error('[TenantManagement] ❌ 保存失败:', err);
       setFormError(err instanceof Error ? err.message : '更新租户失败');
     } finally {
       setSubmitting(false);
@@ -541,13 +577,13 @@ export const TenantManagement: React.FC = () => {
                 <table className="tenant-table">
                   <thead>
                     <tr>
-                      <th style={{ width: '60px', minWidth: '60px' }}>ID</th>
-                      <th style={{ minWidth: '150px' }}>租户名称</th>
-                      <th style={{ minWidth: '100px' }}>代码</th>
-                      <th style={{ minWidth: '350px', width: '40%' }}>资源概览</th>
-                      <th style={{ minWidth: '80px' }}>状态</th>
-                      <th style={{ minWidth: '160px' }}>创建时间</th>
-                      <th style={{ minWidth: '90px', width: '100px' }}>操作</th>
+                      <th>ID</th>
+                      <th>租户名称</th>
+                      <th>代码</th>
+                      <th>资源概览</th>
+                      <th>状态</th>
+                      <th>创建时间</th>
+                      <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -577,15 +613,7 @@ export const TenantManagement: React.FC = () => {
                             <td>
                               {tenant.id}
                               {isCurrentTenant(tenant) && (
-                                <span style={{
-                                  marginLeft: '8px',
-                                  padding: '2px 8px',
-                                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                  color: 'white',
-                                  borderRadius: '4px',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 600
-                                }}>
+                                <span className="current-tenant-badge">
                                   当前租户
                                 </span>
                               )}
@@ -604,44 +632,48 @@ export const TenantManagement: React.FC = () => {
                               <span className="tenant-code">{tenant.code}</span>
                             </td>
                             <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                  <CircularProgress 
-                                    percentage={itineraryPercentage} 
-                                    size={56} 
-                                    strokeWidth={6} 
-                                    label={`${Math.round(itineraryPercentage)}%`}
-                                  />
-                                  <div style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.5 }}>
-                                    <div style={{ fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' }}>
+                              <div className="resource-overview-cell">
+                                <div className="resource-item">
+                                  <div className="resource-icon-wrapper">
+                                    <CircularProgress 
+                                      percentage={itineraryPercentage} 
+                                      size={56} 
+                                      strokeWidth={6} 
+                                      label={`${Math.round(itineraryPercentage)}%`}
+                                    />
+                                  </div>
+                                  <div className="resource-info">
+                                    <div className="resource-title">
                                       🗺️ 行程
                                     </div>
-                                    <div>
-                                      <strong style={{ color: getPercentageColor(itineraryPercentage), fontSize: '1rem' }}>
+                                    <div className="resource-values">
+                                      <span className={`resource-used ${getResourceUsedClass(itineraryPercentage)}`}>
                                         {tenant.itinerary_used}
-                                      </strong>
-                                      <span style={{ color: '#9ca3af', margin: '0 4px' }}>/</span>
-                                      <span style={{ color: '#6b7280' }}>{tenant.itinerary_limit}</span>
+                                      </span>
+                                      <span className="resource-separator">/</span>
+                                      <span>{tenant.itinerary_limit}</span>
                                     </div>
                                   </div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                  <CircularProgress 
-                                    percentage={aiPercentage} 
-                                    size={56} 
-                                    strokeWidth={6}
-                                    label={`${Math.round(aiPercentage)}%`}
-                                  />
-                                  <div style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.5 }}>
-                                    <div style={{ fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' }}>
+                                <div className="resource-item">
+                                  <div className="resource-icon-wrapper">
+                                    <CircularProgress 
+                                      percentage={aiPercentage} 
+                                      size={56} 
+                                      strokeWidth={6}
+                                      label={`${Math.round(aiPercentage)}%`}
+                                    />
+                                  </div>
+                                  <div className="resource-info">
+                                    <div className="resource-title">
                                       🤖 AI
                                     </div>
-                                    <div>
-                                      <strong style={{ color: getPercentageColor(aiPercentage), fontSize: '1rem' }}>
+                                    <div className="resource-values">
+                                      <span className={`resource-used ${getResourceUsedClass(aiPercentage)}`}>
                                         {tenant.ai_calls_used}
-                                      </strong>
-                                      <span style={{ color: '#9ca3af', margin: '0 4px' }}>/</span>
-                                      <span style={{ color: '#6b7280' }}>{tenant.ai_calls_limit}</span>
+                                      </span>
+                                      <span className="resource-separator">/</span>
+                                      <span>{tenant.ai_calls_limit}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -663,7 +695,7 @@ export const TenantManagement: React.FC = () => {
                             </td>
                             <td className="date-cell" style={{ minWidth: '160px' }}>{formatDate(tenant.created_at)}</td>
                             <td style={{ whiteSpace: 'nowrap' }}>
-                              <div style={{ position: 'relative', zIndex: 10 }}>
+                              <div style={{ position: 'relative', zIndex: expandedMenuId === tenant.id ? 9999 : 10 }}>
                                 <button
                                   type="button"
                                   onClick={(e) => {
