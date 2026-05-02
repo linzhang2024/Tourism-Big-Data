@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota, User } from '../types';
-import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota, getPendingUsers, getRejectedUsers, approveUser, rejectUser } from '../api';
+import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota, User, RoleResponse } from '../types';
+import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota, getPendingUsers, getRejectedUsers, approveUser, rejectUser, getRoles } from '../api';
 import { useTenant } from '../contexts/TenantContext';
 
 type TabType = 'tenants' | 'pending' | 'rejected';
@@ -11,6 +11,9 @@ export const TenantManagement: React.FC = () => {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const [roles, setRoles] = useState<RoleResponse[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState(false);
   
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
@@ -33,6 +36,7 @@ export const TenantManagement: React.FC = () => {
     logo_url: '',
     itinerary_limit: 100,
     ai_calls_limit: 50,
+    allowed_role_codes: [],
   });
   const [editFormData, setEditFormData] = useState<TenantUpdate>({});
   const [submitting, setSubmitting] = useState(false);
@@ -78,8 +82,21 @@ export const TenantManagement: React.FC = () => {
     }
   };
 
+  const fetchRoles = async () => {
+    setLoadingRoles(true);
+    try {
+      const data = await getRoles();
+      setRoles(data);
+    } catch (err) {
+      console.error('[TenantManagement] 获取角色列表失败:', err);
+    } finally {
+      setLoadingRoles(false);
+    }
+  };
+
   useEffect(() => {
     fetchTenants();
+    fetchRoles();
   }, []);
 
   useEffect(() => {
@@ -184,6 +201,7 @@ export const TenantManagement: React.FC = () => {
         is_active: detail.is_active,
         itinerary_limit: detail.itinerary_limit,
         ai_calls_limit: detail.ai_calls_limit,
+        allowed_role_codes: detail.allowed_role_codes || [],
       });
       setFormError(null);
       setShowEditModal(true);
@@ -1028,6 +1046,86 @@ export const TenantManagement: React.FC = () => {
                 </label>
               </div>
 
+              <div className="form-group">
+                <label>允许的角色</label>
+                <div style={{ 
+                  background: '#f9fafb', 
+                  padding: '1rem', 
+                  borderRadius: '8px',
+                  border: '1px solid #e5e7eb'
+                }}>
+                  {loadingRoles ? (
+                    <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>加载角色列表中...</div>
+                  ) : roles.length === 0 ? (
+                    <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>暂无角色数据</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {roles.map(role => {
+                        const isSelected = (editFormData.allowed_role_codes || []).includes(role.code);
+                        return (
+                          <label 
+                            key={role.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '8px 12px',
+                              background: isSelected ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)' : 'white',
+                              border: isSelected ? '1px solid #667eea' : '1px solid #e5e7eb',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                const currentRoles = editFormData.allowed_role_codes || [];
+                                if (e.target.checked) {
+                                  setEditFormData(prev => ({
+                                    ...prev,
+                                    allowed_role_codes: [...currentRoles, role.code]
+                                  }));
+                                } else {
+                                  setEditFormData(prev => ({
+                                    ...prev,
+                                    allowed_role_codes: currentRoles.filter(c => c !== role.code)
+                                  }));
+                                }
+                              }}
+                              style={{ margin: 0 }}
+                            />
+                            <div>
+                              <div style={{ fontWeight: 500, fontSize: '0.9rem', color: '#374151' }}>
+                                {role.name}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                {role.code}
+                              </div>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div style={{ 
+                    marginTop: '0.75rem', 
+                    fontSize: '0.75rem', 
+                    color: '#6b7280',
+                    paddingTop: '0.75rem',
+                    borderTop: '1px solid #e5e7eb'
+                  }}>
+                    <strong>说明：</strong>勾选的角色表示该租户下的成员可以使用的角色。租户成员登录时，系统将根据其角色和租户配置动态下发权限。
+                    {(!editFormData.allowed_role_codes || editFormData.allowed_role_codes.length === 0) && (
+                      <span style={{ color: '#ef4444', display: 'block', marginTop: '4px' }}>
+                        ⚠️ 未选择任何角色时，租户成员将只能使用默认的USER角色权限。
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="modal-footer">
                 <button
                   type="button"
@@ -1150,6 +1248,50 @@ export const TenantManagement: React.FC = () => {
                   <span style={{ color: '#10b981' }}>剩余: {selectedTenant.ai_calls_remaining}</span>
                   <span style={{ color: '#6b7280' }}>已用: {selectedTenant.ai_calls_used}</span>
                 </div>
+              </div>
+
+              <h4 style={{ margin: '1.5rem 0 1rem', color: '#374151' }}>🎭 允许的角色</h4>
+              <div style={{ 
+                background: '#f9fafb', 
+                padding: '1rem', 
+                borderRadius: '8px',
+                marginBottom: '1.5rem'
+              }}>
+                {selectedTenant.allowed_role_codes && selectedTenant.allowed_role_codes.length > 0 ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {selectedTenant.allowed_role_codes.map(roleCode => {
+                      const role = roles.find(r => r.code === roleCode);
+                      return (
+                        <span 
+                          key={roleCode}
+                          style={{
+                            padding: '6px 14px',
+                            background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
+                            border: '1px solid #667eea',
+                            borderRadius: '9999px',
+                            fontSize: '0.875rem',
+                            fontWeight: 500,
+                            color: '#667eea'
+                          }}
+                        >
+                          {role ? role.name : roleCode}
+                          <span style={{ marginLeft: '4px', opacity: 0.7 }}>({roleCode})</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ 
+                    color: '#ef4444', 
+                    fontSize: '0.875rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    <span>⚠️</span>
+                    <span>未配置允许的角色。租户成员将只能使用默认的USER角色权限。</span>
+                  </div>
+                )}
               </div>
 
               <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: '8px', fontSize: '0.875rem', color: '#6b7280' }}>

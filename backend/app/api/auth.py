@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from app.models.user import LoginRequest, LoginResponse, UserResponse, UserCreate, UserStatus
 from app.services.user_service import user_service
 from app.services.role_service import role_service
+from app.services.tenant_service import tenant_service
 from app.utils.jwt_utils import jwt_utils
 from app.utils.tenant_context import tenant_context
 
@@ -32,7 +33,17 @@ class LoginErrorDetail(BaseModel):
     error_code: str
 
 
-def get_user_permissions(role_code: str) -> list:
+def get_user_permissions(role_code: str, tenant_id: Optional[int] = None) -> list:
+    if tenant_id:
+        tenant = tenant_service.get_tenant_by_id(tenant_id)
+        if tenant and tenant.allowed_role_codes:
+            if role_code not in tenant.allowed_role_codes:
+                logger.warning(f"[权限获取] 用户角色 '{role_code}' 不在租户允许的角色列表中: {tenant.allowed_role_codes}")
+                base_role = role_service.get_role_by_code("USER")
+                if base_role:
+                    return [p.code for p in base_role.permissions]
+                return []
+    
     role = role_service.get_role_by_code(role_code)
     if role:
         return [p.code for p in role.permissions]
@@ -78,7 +89,7 @@ def get_current_user_dependency(
     
     logger.info(f"[权限校验] 设置租户上下文: tenant_id={tenant_id}, user_id={user_id}")
     
-    permissions = get_user_permissions(user.role_code)
+    permissions = get_user_permissions(user.role_code, tenant_id)
     
     return UserResponse(
         id=user.id,
@@ -179,7 +190,7 @@ async def login(login_request: LoginRequest):
     
     logger.info(f"[认证 API] 登录成功: 用户 '{user.username}'，角色 '{user.role_code}'，租户ID '{user.tenant_id}'")
     
-    permissions = get_user_permissions(user.role_code)
+    permissions = get_user_permissions(user.role_code, user.tenant_id)
     logger.info(f"[认证 API] 用户 '{user.username}' 的权限: {permissions}")
     
     access_token = jwt_utils.create_access_token(user)
@@ -374,7 +385,7 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
     tenant_context.set_user_id(user_id)
     logger.info(f"[认证 API] 设置租户上下文: tenant_id={tenant_id}, user_id={user_id}")
     
-    permissions = get_user_permissions(user.role_code)
+    permissions = get_user_permissions(user.role_code, tenant_id)
     logger.info(f"[认证 API] Token 验证成功: 用户 '{user.username}'，角色 '{user.role_code}'，租户ID '{user.tenant_id}'，权限: {permissions}")
     
     return UserResponse(

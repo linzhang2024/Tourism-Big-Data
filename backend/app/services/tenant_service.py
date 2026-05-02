@@ -31,7 +31,8 @@ class TenantService:
             created_at=datetime.now(),
             is_active=True,
             itinerary_used=0,
-            ai_calls_used=0
+            ai_calls_used=0,
+            allowed_role_codes=tenant_create.allowed_role_codes or []
         )
         self.tenants.append(tenant)
         self.tenant_usage[self.next_id] = {
@@ -39,7 +40,7 @@ class TenantService:
             'ai_calls_used': 0
         }
         self.next_id += 1
-        logger.info(f"[租户服务] 创建租户: {tenant.name} (代码: {tenant.code})")
+        logger.info(f"[租户服务] 创建租户: {tenant.name} (代码: {tenant.code}, 允许角色: {tenant.allowed_role_codes})")
         return tenant
 
     def get_all_tenants(self) -> List[TenantResponse]:
@@ -83,8 +84,10 @@ class TenantService:
             tenant.itinerary_limit = tenant_update.itinerary_limit
         if tenant_update.ai_calls_limit is not None:
             tenant.ai_calls_limit = tenant_update.ai_calls_limit
+        if tenant_update.allowed_role_codes is not None:
+            tenant.allowed_role_codes = tenant_update.allowed_role_codes
         
-        logger.info(f"[租户服务] 更新租户: {tenant.name} (ID: {tenant_id})")
+        logger.info(f"[租户服务] 更新租户: {tenant.name} (ID: {tenant_id}, 允许角色: {tenant.allowed_role_codes})")
         return tenant
 
     def deactivate_tenant(self, tenant_id: int) -> bool:
@@ -210,7 +213,8 @@ class TenantService:
                 description="系统默认租户，用于初始化",
                 logo_url=None,
                 itinerary_limit=1000,
-                ai_calls_limit=500
+                ai_calls_limit=500,
+                allowed_role_codes=["ADMIN", "USER"]
             ),
             TenantCreate(
                 name="租户A",
@@ -218,7 +222,8 @@ class TenantService:
                 description="示例租户A",
                 logo_url=None,
                 itinerary_limit=100,
-                ai_calls_limit=50
+                ai_calls_limit=50,
+                allowed_role_codes=["ADMIN", "USER"]
             ),
             TenantCreate(
                 name="租户B",
@@ -226,14 +231,15 @@ class TenantService:
                 description="示例租户B",
                 logo_url=None,
                 itinerary_limit=200,
-                ai_calls_limit=100
+                ai_calls_limit=100,
+                allowed_role_codes=["USER"]
             )
         ]
         
         for tenant_create in default_tenants:
             if not self.tenant_exists_by_code(tenant_create.code):
                 created_tenant = self.create_tenant(tenant_create)
-                logger.info(f"[租户初始化] 创建默认租户: {created_tenant.name} (代码: {created_tenant.code})")
+                logger.info(f"[租户初始化] 创建默认租户: {created_tenant.name} (代码: {created_tenant.code}, 允许角色: {created_tenant.allowed_role_codes})")
             else:
                 logger.info(f"[租户初始化] 默认租户已存在: {tenant_create.code}")
 

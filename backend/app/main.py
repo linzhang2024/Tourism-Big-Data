@@ -43,53 +43,105 @@ def initialize_roles():
 
 
 def initialize_permissions():
+    from app.models.permission import PermissionType
+    
     default_permissions = [
         PermissionCreate(
             name="查看数据",
             code=PermissionCode.DATA_VIEW,
+            permission_type=PermissionType.DATA,
             description="查看系统数据的权限"
         ),
         PermissionCreate(
             name="导出数据",
             code=PermissionCode.DATA_EXPORT,
+            permission_type=PermissionType.DATA,
             description="导出系统数据的权限"
         ),
         PermissionCreate(
             name="启动爬虫",
             code=PermissionCode.SPIDER_RUN,
+            permission_type=PermissionType.DATA,
             description="启动数据爬虫任务的权限"
         ),
         PermissionCreate(
             name="系统管理",
             code=PermissionCode.SYS_MANAGE,
+            permission_type=PermissionType.DATA,
             description="系统管理相关操作的权限"
         ),
         PermissionCreate(
             name="查看行程",
             code=PermissionCode.ITINERARY_VIEW,
+            permission_type=PermissionType.DATA,
             description="查看行程列表和详情的权限"
         ),
         PermissionCreate(
             name="创建行程",
             code=PermissionCode.ITINERARY_CREATE,
+            permission_type=PermissionType.DATA,
             description="创建新行程的权限"
         ),
         PermissionCreate(
             name="更新行程",
             code=PermissionCode.ITINERARY_UPDATE,
+            permission_type=PermissionType.DATA,
             description="更新行程信息的权限"
         ),
         PermissionCreate(
             name="删除行程",
             code=PermissionCode.ITINERARY_DELETE,
+            permission_type=PermissionType.DATA,
             description="删除行程的权限"
+        ),
+        PermissionCreate(
+            name="数据面板",
+            code=PermissionCode.MENU_DASHBOARD,
+            permission_type=PermissionType.MENU,
+            description="访问数据面板菜单的权限"
+        ),
+        PermissionCreate(
+            name="数据洞察",
+            code=PermissionCode.MENU_INSIGHTS,
+            permission_type=PermissionType.MENU,
+            description="访问数据洞察菜单的权限"
+        ),
+        PermissionCreate(
+            name="行程规划",
+            code=PermissionCode.MENU_ITINERARY,
+            permission_type=PermissionType.MENU,
+            description="访问行程规划菜单的权限"
+        ),
+        PermissionCreate(
+            name="个人中心",
+            code=PermissionCode.MENU_PROFILE,
+            permission_type=PermissionType.MENU,
+            description="访问个人中心菜单的权限"
+        ),
+        PermissionCreate(
+            name="租户管理",
+            code=PermissionCode.MENU_TENANTS,
+            permission_type=PermissionType.MENU,
+            description="访问租户管理菜单的权限"
+        ),
+        PermissionCreate(
+            name="角色管理",
+            code=PermissionCode.MENU_ROLES,
+            permission_type=PermissionType.MENU,
+            description="访问角色管理菜单的权限"
+        ),
+        PermissionCreate(
+            name="权限管理",
+            code=PermissionCode.MENU_PERMISSIONS,
+            permission_type=PermissionType.MENU,
+            description="访问权限管理菜单的权限"
         )
     ]
     
     for permission in default_permissions:
         if not permission_service.permission_exists_by_code(permission.code):
             created_perm = permission_service.create_permission(permission)
-            logger.info(f"[权限初始化] 创建权限: {created_perm.name} ({created_perm.code})")
+            logger.info(f"[权限初始化] 创建权限: {created_perm.name} ({created_perm.code}, type: {created_perm.permission_type})")
 
 
 def initialize_role_permissions():
@@ -99,12 +151,31 @@ def initialize_role_permissions():
     admin_count = role_service.add_permissions_to_role("ADMIN", all_permissions)
     logger.info(f"[权限初始化] 为 ADMIN 角色分配了 {admin_count} 个权限")
     
+    user_permissions = []
+    
     data_view_perm = permission_service.get_permission_by_code(PermissionCode.DATA_VIEW)
     if data_view_perm:
-        user_count = role_service.add_permissions_to_role("USER", [data_view_perm])
-        logger.info(f"[权限初始化] 为 USER 角色分配了 {user_count} 个权限 (data:view)")
-    else:
-        logger.warning("[权限初始化] 未找到 data:view 权限")
+        user_permissions.append(data_view_perm)
+    
+    menu_dashboard = permission_service.get_permission_by_code(PermissionCode.MENU_DASHBOARD)
+    if menu_dashboard:
+        user_permissions.append(menu_dashboard)
+    
+    menu_insights = permission_service.get_permission_by_code(PermissionCode.MENU_INSIGHTS)
+    if menu_insights:
+        user_permissions.append(menu_insights)
+    
+    menu_itinerary = permission_service.get_permission_by_code(PermissionCode.MENU_ITINERARY)
+    if menu_itinerary:
+        user_permissions.append(menu_itinerary)
+    
+    menu_profile = permission_service.get_permission_by_code(PermissionCode.MENU_PROFILE)
+    if menu_profile:
+        user_permissions.append(menu_profile)
+    
+    if user_permissions:
+        user_count = role_service.add_permissions_to_role("USER", user_permissions)
+        logger.info(f"[权限初始化] 为 USER 角色分配了 {user_count} 个权限")
     
     admin_role = role_service.get_role_by_code("ADMIN")
     user_role = role_service.get_role_by_code("USER")

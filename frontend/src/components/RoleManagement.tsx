@@ -260,7 +260,7 @@ export const RoleManagement: React.FC = () => {
 
       {showPermissionModal && selectedRole && (
         <div className="modal-overlay" onClick={() => setShowPermissionModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
             <div className="modal-header">
               <h3>权限设置 - {selectedRole.name}</h3>
               <button
@@ -276,29 +276,119 @@ export const RoleManagement: React.FC = () => {
               <div className="error-message">{permissionError}</div>
             )}
 
-            <div className="permission-list">
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
               {permissions.length === 0 ? (
                 <div className="empty-permissions">暂无权限数据</div>
               ) : (
-                permissions.map(permission => (
-                  <label key={permission.id} className="permission-item">
-                    <input
-                      type="checkbox"
-                      checked={selectedPermissions.includes(permission.code)}
-                      onChange={() => handlePermissionToggle(permission.code)}
-                      className="permission-checkbox"
-                    />
-                    <div className="permission-info">
-                      <div className="permission-name">{permission.name}</div>
-                      <div className="permission-code">{permission.code}</div>
-                      <div className="permission-desc">{permission.description || '暂无描述'}</div>
-                    </div>
-                  </label>
-                ))
+                <>
+                  {(() => {
+                    const menuPermissions = permissions.filter(p => p.permission_type === 'menu');
+                    const dataPermissions = permissions.filter(p => p.permission_type === 'data');
+                    
+                    const renderPermissionGroup = (title: string, type: string, perms: typeof permissions, icon: string) => {
+                      if (perms.length === 0) return null;
+                      
+                      const allSelected = perms.every(p => selectedPermissions.includes(p.code));
+                      const someSelected = perms.some(p => selectedPermissions.includes(p.code));
+                      
+                      const handleSelectAll = () => {
+                        if (allSelected) {
+                          const newSelected = selectedPermissions.filter(code => 
+                            !perms.some(p => p.code === code)
+                          );
+                          setSelectedPermissions(newSelected);
+                        } else {
+                          const newSelected = [...selectedPermissions];
+                          perms.forEach(p => {
+                            if (!newSelected.includes(p.code)) {
+                              newSelected.push(p.code);
+                            }
+                          });
+                          setSelectedPermissions(newSelected);
+                        }
+                      };
+                      
+                      return (
+                        <div key={type} style={{ marginBottom: '1.5rem' }}>
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between',
+                            padding: '0.75rem 1rem',
+                            background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)',
+                            borderRadius: '8px',
+                            marginBottom: '0.75rem'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: '#374151' }}>
+                              <span>{icon}</span>
+                              <span>{title}</span>
+                              <span style={{ 
+                                fontSize: '0.75rem', 
+                                color: '#6b7280', 
+                                background: '#e5e7eb',
+                                padding: '2px 8px',
+                                borderRadius: '9999px',
+                                fontWeight: 400
+                              }}>
+                                {perms.filter(p => selectedPermissions.includes(p.code)).length}/{perms.length}
+                              </span>
+                            </div>
+                            <label style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '6px', 
+                              cursor: 'pointer',
+                              fontSize: '0.875rem',
+                              color: '#6b7280'
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                ref={(el) => {
+                                  if (el) el.indeterminate = someSelected && !allSelected;
+                                }}
+                                onChange={handleSelectAll}
+                              />
+                              <span>全选</span>
+                            </label>
+                          </div>
+                          
+                          <div style={{ display: 'grid', gap: '4px' }}>
+                            {perms.map(permission => (
+                              <label key={permission.id} className="permission-item" style={{ margin: 0 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedPermissions.includes(permission.code)}
+                                  onChange={() => handlePermissionToggle(permission.code)}
+                                  className="permission-checkbox"
+                                />
+                                <div className="permission-info">
+                                  <div className="permission-name">{permission.name}</div>
+                                  <div className="permission-code">{permission.code}</div>
+                                  <div className="permission-desc">{permission.description || '暂无描述'}</div>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    };
+                    
+                    return (
+                      <>
+                        {renderPermissionGroup('菜单权限', 'menu', menuPermissions, '📋')}
+                        {renderPermissionGroup('数据权限', 'data', dataPermissions, '🔧')}
+                      </>
+                    );
+                  })()}
+                </>
               )}
             </div>
 
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1rem', marginTop: '0' }}>
+              <div style={{ marginRight: 'auto', color: '#6b7280', fontSize: '0.875rem' }}>
+                已选择 <strong style={{ color: '#667eea' }}>{selectedPermissions.length}</strong> 个权限
+              </div>
               <button
                 type="button"
                 className="cancel-btn"

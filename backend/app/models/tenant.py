@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -10,6 +10,7 @@ class TenantBase(BaseModel):
     logo_url: Optional[str] = Field(None, description="租户Logo URL")
     itinerary_limit: Optional[int] = Field(100, description="行程数量上限")
     ai_calls_limit: Optional[int] = Field(50, description="AI调用次数上限")
+    allowed_role_codes: List[str] = Field(default_factory=list, description="该租户允许使用的角色代码列表")
 
 
 class TenantCreate(TenantBase):
@@ -23,6 +24,7 @@ class TenantUpdate(BaseModel):
     is_active: Optional[bool] = Field(None, description="是否激活")
     itinerary_limit: Optional[int] = Field(None, description="行程数量上限")
     ai_calls_limit: Optional[int] = Field(None, description="AI调用次数上限")
+    allowed_role_codes: Optional[List[str]] = Field(None, description="该租户允许使用的角色代码列表")
 
 
 class QuotaUsage(BaseModel):

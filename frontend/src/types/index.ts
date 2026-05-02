@@ -8,10 +8,13 @@ export interface TrendModel {
   score: number;
 }
 
+export type PermissionType = 'menu' | 'data';
+
 export interface PermissionResponse {
   id: number;
   name: string;
   code: string;
+  permission_type: PermissionType;
   description?: string;
   created_at: string;
 }
@@ -207,6 +210,7 @@ export interface Tenant {
   is_active: boolean;
   itinerary_used: number;
   ai_calls_used: number;
+  allowed_role_codes: string[];
 }
 
 export interface TenantWithQuota extends Tenant {
@@ -232,6 +236,7 @@ export interface TenantCreate {
   logo_url?: string;
   itinerary_limit?: number;
   ai_calls_limit?: number;
+  allowed_role_codes?: string[];
 }
 
 export interface TenantUpdate {
@@ -241,4 +246,5 @@ export interface TenantUpdate {
   is_active?: boolean;
   itinerary_limit?: number;
   ai_calls_limit?: number;
+  allowed_role_codes?: string[];
 }
