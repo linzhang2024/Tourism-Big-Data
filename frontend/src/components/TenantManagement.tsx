@@ -541,13 +541,13 @@ export const TenantManagement: React.FC = () => {
                 <table className="tenant-table">
                   <thead>
                     <tr>
-                      <th>ID</th>
-                      <th>租户名称</th>
-                      <th>代码</th>
-                      <th>资源概览</th>
-                      <th>状态</th>
-                      <th>创建时间</th>
-                      <th>操作</th>
+                      <th style={{ width: '80px', minWidth: '80px' }}>ID</th>
+                      <th style={{ width: '180px', minWidth: '180px' }}>租户名称</th>
+                      <th style={{ width: '120px', minWidth: '120px' }}>代码</th>
+                      <th style={{ width: '320px', minWidth: '320px' }}>资源概览</th>
+                      <th style={{ width: '100px', minWidth: '100px' }}>状态</th>
+                      <th style={{ width: '160px', minWidth: '160px' }}>创建时间</th>
+                      <th style={{ width: '100px', minWidth: '100px' }}>操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -603,20 +603,46 @@ export const TenantManagement: React.FC = () => {
                             <td>
                               <span className="tenant-code">{tenant.code}</span>
                             </td>
-                            <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <CircularProgress percentage={itineraryPercentage} size={36} strokeWidth={4} />
-                                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                                    <div style={{ fontWeight: 500, color: '#374151' }}>🗺️ 行程</div>
-                                    <div>{tenant.itinerary_used}/{tenant.itinerary_limit}</div>
+                            <td style={{ minWidth: '280px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <CircularProgress 
+                                    percentage={itineraryPercentage} 
+                                    size={48} 
+                                    strokeWidth={5} 
+                                    label={`${Math.round(itineraryPercentage)}%`}
+                                  />
+                                  <div style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.4 }}>
+                                    <div style={{ fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      🗺️ 行程
+                                    </div>
+                                    <div>
+                                      <strong style={{ color: getPercentageColor(itineraryPercentage) }}>
+                                        {tenant.itinerary_used}
+                                      </strong>
+                                      <span style={{ color: '#9ca3af' }}> / </span>
+                                      <span>{tenant.itinerary_limit}</span>
+                                    </div>
                                   </div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <CircularProgress percentage={aiPercentage} size={36} strokeWidth={4} />
-                                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                                    <div style={{ fontWeight: 500, color: '#374151' }}>🤖 AI</div>
-                                    <div>{tenant.ai_calls_used}/{tenant.ai_calls_limit}</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <CircularProgress 
+                                    percentage={aiPercentage} 
+                                    size={48} 
+                                    strokeWidth={5}
+                                    label={`${Math.round(aiPercentage)}%`}
+                                  />
+                                  <div style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.4 }}>
+                                    <div style={{ fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      🤖 AI
+                                    </div>
+                                    <div>
+                                      <strong style={{ color: getPercentageColor(aiPercentage) }}>
+                                        {tenant.ai_calls_used}
+                                      </strong>
+                                      <span style={{ color: '#9ca3af' }}> / </span>
+                                      <span>{tenant.ai_calls_limit}</span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -635,9 +661,9 @@ export const TenantManagement: React.FC = () => {
                                 {tenant.is_active ? '✓ 激活' : '✗ 停用'}
                               </span>
                             </td>
-                            <td className="date-cell">{formatDate(tenant.created_at)}</td>
-                            <td>
-                              <div style={{ position: 'relative' }}>
+                            <td className="date-cell" style={{ minWidth: '160px' }}>{formatDate(tenant.created_at)}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              <div style={{ position: 'relative', zIndex: 10 }}>
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -645,8 +671,8 @@ export const TenantManagement: React.FC = () => {
                                     setExpandedMenuId(expandedMenuId === tenant.id ? null : tenant.id);
                                   }}
                                   style={{
-                                    padding: '6px 10px',
-                                    background: '#f3f4f6',
+                                    padding: '6px 12px',
+                                    background: '#f9fafb',
                                     color: '#374151',
                                     border: '1px solid #d1d5db',
                                     borderRadius: '6px',
@@ -654,14 +680,15 @@ export const TenantManagement: React.FC = () => {
                                     fontSize: '0.875rem',
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '4px',
-                                    transition: 'all 0.2s'
+                                    gap: '6px',
+                                    transition: 'all 0.2s',
+                                    fontWeight: 500
                                   }}
                                   onMouseEnter={(e) => {
                                     e.currentTarget.style.background = '#e5e7eb';
                                   }}
                                   onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = '#f3f4f6';
+                                    e.currentTarget.style.background = '#f9fafb';
                                   }}
                                 >
                                   ⋮ 更多
@@ -671,13 +698,13 @@ export const TenantManagement: React.FC = () => {
                                     position: 'absolute',
                                     top: '100%',
                                     right: 0,
-                                    marginTop: '4px',
+                                    marginTop: '6px',
                                     background: 'white',
                                     border: '1px solid #e5e7eb',
                                     borderRadius: '8px',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                    zIndex: 100,
-                                    minWidth: '120px',
+                                    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                                    zIndex: 9999,
+                                    minWidth: '140px',
                                     overflow: 'hidden'
                                   }}>
                                     <button
