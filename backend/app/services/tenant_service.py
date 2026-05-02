@@ -234,7 +234,8 @@ class TenantService:
             itinerary_remaining=max(0, itinerary_limit - usage['itinerary_used']),
             ai_calls_remaining=max(0, ai_calls_limit - usage['ai_calls_used']),
             itinerary_percentage=round(itinerary_percentage, 2),
-            ai_calls_percentage=round(ai_calls_percentage, 2)
+            ai_calls_percentage=round(ai_calls_percentage, 2),
+            allowed_role_codes=tenant.allowed_role_codes
         )
 
     def reset_usage(self, tenant_id: int) -> bool:
