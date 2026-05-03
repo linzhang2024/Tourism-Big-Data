@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota, User, RoleResponse, PermissionCategory, PermissionResponse, TenantCloneRequest } from '../types';
+import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota, User, RoleResponse, PermissionCategory, PermissionResponse, TenantCloneRequest, TenantCloneResponse } from '../types';
 import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota, getPendingUsers, getRejectedUsers, approveUser, rejectUser, getRoles, updateTenantRoles, cloneTenant } from '../api';
 import { useTenant } from '../contexts/TenantContext';
+import { useToast } from '../contexts/ToastContext';
 
 type TabType = 'tenants' | 'pending' | 'rejected';
 
@@ -154,6 +155,7 @@ export const TenantManagement: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
 
   const { currentTenant, refreshTenant } = useTenant();
+  const toast = useToast();
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -427,7 +429,7 @@ export const TenantManagement: React.FC = () => {
       console.log(`[TenantManagement] 克隆配置: ${JSON.stringify(cloneFormData)}`);
       console.log('='.repeat(60));
       
-      const result = await cloneTenant(selectedTenant.id, cloneFormData);
+      const result: TenantCloneResponse = await cloneTenant(selectedTenant.id, cloneFormData);
       
       console.log('='.repeat(60));
       console.log('[TenantManagement] ✅ 租户克隆成功');
@@ -438,42 +440,60 @@ export const TenantManagement: React.FC = () => {
       setShowCloneModal(false);
       fetchTenants();
       
-      alert(`租户克隆成功！\n新租户: ${result.name} (${result.code})\n已克隆 ${result.cloned_roles_count} 个角色，${result.cloned_permissions_count} 个权限。`);
+      const tenantName = result.name || '未知租户';
+      const tenantCode = result.code || '未知代码';
+      const clonedRolesCount = result.cloned_roles_count ?? 0;
+      const clonedPermissionsCount = result.cloned_permissions_count ?? 0;
+      
+      toast.success(
+        `新租户: ${tenantName} (${tenantCode})\n已克隆 ${clonedRolesCount} 个角色，${clonedPermissionsCount} 个权限。`,
+        '租户克隆成功'
+      );
     } catch (err) {
       console.error('[TenantManagement] ❌ 克隆失败:', err);
-      setFormError(err instanceof Error ? err.message : '克隆租户失败');
+      const errorMessage = err instanceof Error ? err.message : '克隆租户失败';
+      setFormError(errorMessage);
+      toast.error(errorMessage, '克隆失败');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteTenant = async (tenant: Tenant) => {
-    if (!window.confirm(`确定要删除租户 "${tenant.name}" 吗？此操作不可恢复。`)) {
-      return;
-    }
-
-    try {
-      await deleteTenant(tenant.id);
-      fetchTenants();
-    } catch (err) {
-      console.error('删除租户失败:', err);
-      alert('删除失败: ' + (err instanceof Error ? err.message : '未知错误'));
-    }
+    toast.confirm(
+      `确定要删除租户 "${tenant.name}" 吗？此操作不可恢复。`,
+      async () => {
+        try {
+          await deleteTenant(tenant.id);
+          fetchTenants();
+          toast.success(`租户 "${tenant.name}" 已成功删除`, '删除成功');
+        } catch (err) {
+          console.error('删除租户失败:', err);
+          const errorMessage = '删除失败: ' + (err instanceof Error ? err.message : '未知错误');
+          toast.error(errorMessage, '删除失败');
+        }
+      },
+      '确认删除'
+    );
   };
 
   const handleApproveUser = async (user: User) => {
-    if (!window.confirm(`确定要通过用户 "${user.username}" 的注册申请吗？`)) {
-      return;
-    }
-
-    try {
-      await approveUser(user.id);
-      console.log('[TenantManagement] 用户审批通过:', user.username);
-      fetchPendingUsers();
-    } catch (err) {
-      console.error('审批用户失败:', err);
-      alert('审批失败: ' + (err instanceof Error ? err.message : '未知错误'));
-    }
+    toast.confirm(
+      `确定要通过用户 "${user.username}" 的注册申请吗？`,
+      async () => {
+        try {
+          await approveUser(user.id);
+          console.log('[TenantManagement] 用户审批通过:', user.username);
+          fetchPendingUsers();
+          toast.success(`用户 "${user.username}" 的注册申请已通过`, '审批成功');
+        } catch (err) {
+          console.error('审批用户失败:', err);
+          const errorMessage = '审批失败: ' + (err instanceof Error ? err.message : '未知错误');
+          toast.error(errorMessage, '审批失败');
+        }
+      },
+      '确认审批'
+    );
   };
 
   const handleOpenRejectModal = (user: User) => {
@@ -503,24 +523,30 @@ export const TenantManagement: React.FC = () => {
 
   const handleResetQuota = async () => {
     if (!selectedTenant) return;
-    if (!window.confirm(`确定要重置租户 "${selectedTenant.name}" 的配额使用量吗？`)) {
-      return;
-    }
-
-    try {
-      await resetTenantQuota(selectedTenant.id);
-      const updated = await getTenantById(selectedTenant.id);
-      setSelectedTenant(updated);
-      fetchTenants();
-      
-      if (currentTenant && selectedTenant.id === currentTenant.id) {
-        console.log('[TenantManagement] 检测到重置的是当前登录租户配额，刷新全局租户信息');
-        await refreshTenant();
-      }
-    } catch (err) {
-      console.error('重置配额失败:', err);
-      alert('重置失败: ' + (err instanceof Error ? err.message : '未知错误'));
-    }
+    
+    toast.confirm(
+      `确定要重置租户 "${selectedTenant.name}" 的配额使用量吗？`,
+      async () => {
+        try {
+          await resetTenantQuota(selectedTenant.id);
+          const updated = await getTenantById(selectedTenant.id);
+          setSelectedTenant(updated);
+          fetchTenants();
+          
+          if (currentTenant && selectedTenant.id === currentTenant.id) {
+            console.log('[TenantManagement] 检测到重置的是当前登录租户配额，刷新全局租户信息');
+            await refreshTenant();
+          }
+          
+          toast.success(`租户 "${selectedTenant.name}" 的配额使用量已重置`, '重置成功');
+        } catch (err) {
+          console.error('重置配额失败:', err);
+          const errorMessage = '重置失败: ' + (err instanceof Error ? err.message : '未知错误');
+          toast.error(errorMessage, '重置失败');
+        }
+      },
+      '确认重置'
+    );
   };
 
   const formatDate = (dateStr: string) => {
