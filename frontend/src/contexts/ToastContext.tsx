@@ -158,39 +158,64 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
     confirm,
   };
 
+  const toastContainerStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: '20px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    zIndex: 9999,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    maxWidth: '500px',
+    width: 'calc(100% - 40px)',
+  };
+
+  const overlayStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  };
+
+  const dialogStyle: React.CSSProperties = {
+    background: 'white',
+    borderRadius: '16px',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.25)',
+    padding: '2rem',
+    maxWidth: '450px',
+    width: 'calc(100% - 40px)',
+  };
+
   return (
     <ToastContext.Provider value={value}>
-      {children}
+      <>{children}</>
       
-      <div style={{
-        position: 'fixed',
-        top: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 9999,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-        maxWidth: '500px',
-        width: 'calc(100% - 40px)',
-      }}>
+      <div style={toastContainerStyle}>
         {toasts.map(toast => {
           const style = getToastStyle(toast.type);
+          const toastItemStyle: React.CSSProperties = {
+            padding: '16px 20px',
+            borderRadius: '12px',
+            border: `1px solid ${style.borderColor}`,
+            background: style.background,
+            color: style.color,
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '12px',
+          };
+          
           return (
             <div
               key={toast.id}
-              style={{
-                padding: '16px 20px',
-                borderRadius: '12px',
-                border: `1px solid ${style.borderColor}`,
-                background: style.background,
-                color: style.color,
-                boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '12px',
-                animation: 'slideDown 0.3s ease-out',
-              }}
+              style={toastItemStyle}
               onClick={() => hideToast(toast.id)}
             >
               <div style={{
@@ -248,15 +273,6 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderRadius: '4px',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.opacity = '1';
-                  e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '0.6';
-                  e.currentTarget.style.background = 'none';
                 }}
               >
                 ✕
@@ -267,128 +283,89 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
       </div>
 
       {confirmDialog && confirmDialog.visible && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 9999,
-          animation: 'fadeIn 0.2s ease-out',
-        }}
-          onClick={confirmDialog.onCancel}
-        >
-          <div style={{
-          background: 'white',
-          borderRadius: '16px',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.25)',
-          padding: '2rem',
-          maxWidth: '450px',
-          width: 'calc(100% - 40px)',
-          animation: 'scaleIn 0.2s ease-out',
-        }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            marginBottom: '1rem',
-          }}>
+        <div style={overlayStyle} onClick={confirmDialog.onCancel}>
+          <div style={dialogStyle} onClick={(e) => e.stopPropagation()}>
             <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: '1.25rem',
-              fontWeight: 700,
+              gap: '12px',
+              marginBottom: '1rem',
             }}>
-              ?
-            </div>
-            <h3 style={{
-              margin: 0,
-              color: '#374151',
-              fontSize: '1.25rem',
-              fontWeight: 700,
-            }}>
-              {confirmDialog.title}
-            </h3>
-          </div>
-          
-          <div style={{
-            color: '#6b7280',
-            fontSize: '0.95rem',
-            lineHeight: 1.6,
-            marginBottom: '1.5rem',
-            paddingLeft: '52px',
-          }}>
-            {confirmDialog.message}
-          </div>
-          
-          <div style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: '12px',
-          }}>
-            <button
-              type="button"
-              onClick={confirmDialog.onCancel}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: '#f3f4f6',
-                color: '#374151',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '0.95rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#e5e7eb';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = '#f3f4f6';
-              }}
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              onClick={confirmDialog.onConfirm}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '0.95rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            >
-              确认
-            </button>
+                fontSize: '1.25rem',
+                fontWeight: 700,
+              }}>
+                ?
+              </div>
+              <h3 style={{
+                margin: 0,
+                color: '#374151',
+                fontSize: '1.25rem',
+                fontWeight: 700,
+              }}>
+                {confirmDialog.title}
+              </h3>
+            </div>
+            
+            <div style={{
+              color: '#6b7280',
+              fontSize: '0.95rem',
+              lineHeight: 1.6,
+              marginBottom: '1.5rem',
+              paddingLeft: '52px',
+            }}>
+              {confirmDialog.message}
+            </div>
+            
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '12px',
+            }}>
+              <button
+                type="button"
+                onClick={confirmDialog.onCancel}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: '#f3f4f6',
+                  color: '#374151',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.95rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={confirmDialog.onConfirm}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.95rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                确认
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <style>{`
         @keyframes slideDown {
