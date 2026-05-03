@@ -46,7 +46,12 @@ class TenantService:
         return tenant
 
     def get_all_tenants(self) -> List[TenantResponse]:
-        return [t for t in self.tenants if t.is_active]
+        logger.info(f"[租户服务] 获取所有租户列表（共 {len(self.tenants)} 个租户，包括激活和禁用状态）")
+        for tenant in self.tenants:
+            usage = self.tenant_usage.get(tenant.id, {'itinerary_used': 0, 'ai_calls_used': 0})
+            tenant.itinerary_used = usage['itinerary_used']
+            tenant.ai_calls_used = usage['ai_calls_used']
+        return self.tenants.copy()
 
     def get_tenant_by_id(self, tenant_id: int, include_inactive: bool = False) -> Optional[TenantResponse]:
         for tenant in self.tenants:
@@ -72,9 +77,13 @@ class TenantService:
         return self.get_tenant_by_code(code) is not None
 
     def update_tenant(self, tenant_id: int, tenant_update: TenantUpdate) -> Optional[TenantResponse]:
-        tenant = self.get_tenant_by_id(tenant_id)
+        tenant = self.get_tenant_by_id(tenant_id, include_inactive=True)
         if tenant is None:
+            logger.error(f"[租户服务] 更新租户失败: 租户 ID '{tenant_id}' 不存在")
             return None
+        
+        old_status = tenant.is_active
+        old_name = tenant.name
         
         if tenant_update.name is not None:
             tenant.name = tenant_update.name
@@ -84,6 +93,11 @@ class TenantService:
             tenant.logo_url = tenant_update.logo_url
         if tenant_update.is_active is not None:
             tenant.is_active = tenant_update.is_active
+            if old_status != tenant.is_active:
+                if tenant.is_active:
+                    logger.info(f"[租户服务] 激活租户: {old_name} (ID: {tenant_id}) - 从 '禁用' 变更为 '激活'")
+                else:
+                    logger.info(f"[租户服务] 禁用租户: {old_name} (ID: {tenant_id}) - 从 '激活' 变更为 '禁用'")
         if tenant_update.itinerary_limit is not None:
             tenant.itinerary_limit = tenant_update.itinerary_limit
         if tenant_update.ai_calls_limit is not None:
