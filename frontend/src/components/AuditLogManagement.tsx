@@ -51,6 +51,35 @@ const formatDate = (dateStr: string): string => {
   });
 };
 
+const formatDateTimeForApi = (dateTimeStr: string, isEndTime: boolean = false): string => {
+  if (!dateTimeStr) return '';
+  
+  let datePart: string;
+  let timePart: string;
+  
+  if (dateTimeStr.includes('T')) {
+    const [date, time] = dateTimeStr.split('T');
+    datePart = date;
+    timePart = time || '';
+  } else {
+    datePart = dateTimeStr;
+    timePart = '';
+  }
+  
+  if (!timePart) {
+    timePart = isEndTime ? '23:59:59' : '00:00:00';
+  } else {
+    const timeParts = timePart.split(':');
+    if (timeParts.length < 3) {
+      timePart = isEndTime 
+        ? `${timePart}:59` 
+        : `${timePart}:00`;
+    }
+  }
+  
+  return `${datePart} ${timePart}`;
+};
+
 const formatDetails = (details: Record<string, any> | null): string => {
   if (!details || Object.keys(details).length === 0) {
     return '-';
@@ -151,12 +180,20 @@ export const AuditLogManagement: React.FC = () => {
       if (filterStatus) {
         params.status = filterStatus as 'success' | 'failed';
       }
-      if (filterStartTime) {
-        params.start_time = filterStartTime;
+      
+      const formattedStartTime = formatDateTimeForApi(filterStartTime, false);
+      const formattedEndTime = formatDateTimeForApi(filterEndTime, true);
+      
+      if (formattedStartTime) {
+        params.start_date = formattedStartTime;
+        console.log('[AuditLogManagement] 格式化开始时间:', filterStartTime, '->', formattedStartTime);
       }
-      if (filterEndTime) {
-        params.end_time = filterEndTime;
+      if (formattedEndTime) {
+        params.end_date = formattedEndTime;
+        console.log('[AuditLogManagement] 格式化结束时间:', filterEndTime, '->', formattedEndTime);
       }
+      
+      console.log('[AuditLogManagement] 请求参数:', params);
       
       const response: AuditLogPagedResponse = await getAuditLogs(params);
       setLogs(response.items);
