@@ -55,3 +55,22 @@ class TenantWithQuota(TenantResponse):
     ai_calls_remaining: int = Field(50, description="剩余AI调用次数")
     itinerary_percentage: float = Field(0.0, description="行程使用百分比")
     ai_calls_percentage: float = Field(0.0, description="AI调用使用百分比")
+
+
+class TenantCloneRequest(BaseModel):
+    name: str = Field(..., description="新租户名称")
+    code: str = Field(..., description="新租户代码")
+    clone_roles: bool = Field(True, description="是否克隆角色")
+    clone_permissions: bool = Field(True, description="是否克隆权限")
+    clone_config: bool = Field(True, description="是否克隆配置(配额、设置等)")
+
+
+class TenantCloneResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int = Field(..., description="新租户唯一 ID")
+    name: str = Field(..., description="新租户名称")
+    code: str = Field(..., description="新租户代码")
+    cloned_roles_count: int = Field(0, description="克隆的角色数量")
+    cloned_permissions_count: int = Field(0, description="克隆的权限数量")
+    message: str = Field(..., description="克隆结果消息")

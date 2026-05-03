@@ -8,7 +8,9 @@ from app.models.tenant import (
     TenantUpdate, 
     TenantWithQuota,
     QuotaUsage,
-    TenantRolesUpdate
+    TenantRolesUpdate,
+    TenantCloneRequest,
+    TenantCloneResponse
 )
 from app.services.tenant_service import tenant_service
 from app.services.user_service import user_service
@@ -247,3 +249,45 @@ async def update_quota(
     
     logger.info(f"[租户API] 租户配额更新成功: ID={tenant_id}")
     return updated_tenant
+
+
+@router.post("/{tenant_id}/clone", response_model=TenantCloneResponse, status_code=201)
+async def clone_tenant(tenant_id: int, clone_request: TenantCloneRequest):
+    logger.info("=" * 60)
+    logger.info(f"[租户克隆API] 收到克隆租户请求: 源租户ID={tenant_id}")
+    logger.info(f"[租户克隆API] 新租户配置: 名称={clone_request.name}, 代码={clone_request.code}")
+    logger.info(f"[租户克隆API] 克隆选项: 角色={clone_request.clone_roles}, 权限={clone_request.clone_permissions}, 配置={clone_request.clone_config}")
+    logger.info("=" * 60)
+    
+    source_tenant = tenant_service.get_tenant_by_id(tenant_id)
+    if source_tenant is None:
+        logger.error(f"[租户克隆API] 克隆失败: 源租户 ID '{tenant_id}' 不存在")
+        raise HTTPException(
+            status_code=404,
+            detail=f"源租户 ID '{tenant_id}' 不存在"
+        )
+    
+    logger.info(f"[租户克隆API] 找到源租户: name='{source_tenant.name}', code='{source_tenant.code}'")
+    
+    if tenant_service.tenant_exists_by_code(clone_request.code):
+        logger.error(f"[租户克隆API] 克隆失败: 租户代码 '{clone_request.code}' 已存在")
+        raise HTTPException(
+            status_code=400,
+            detail=f"租户代码 '{clone_request.code}' 已存在"
+        )
+    
+    cloned_tenant = tenant_service.clone_tenant(tenant_id, clone_request)
+    if cloned_tenant is None:
+        logger.error(f"[租户克隆API] 克隆失败: tenant_service.clone_tenant 返回 None")
+        raise HTTPException(
+            status_code=500,
+            detail="克隆租户失败"
+        )
+    
+    logger.info("=" * 60)
+    logger.info(f"[租户克隆API] ✅ 租户克隆成功")
+    logger.info(f"[租户克隆API] 新租户: ID={cloned_tenant.id}, 名称={cloned_tenant.name}, 代码={cloned_tenant.code}")
+    logger.info(f"[租户克隆API] 克隆统计: 角色={cloned_tenant.cloned_roles_count}个, 权限={cloned_tenant.cloned_permissions_count}个")
+    logger.info("=" * 60)
+    
+    return cloned_tenant

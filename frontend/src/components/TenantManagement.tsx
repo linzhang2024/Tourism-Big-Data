@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota, User, RoleResponse, PermissionCategory, PermissionResponse } from '../types';
-import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota, getPendingUsers, getRejectedUsers, approveUser, rejectUser, getRoles, updateTenantRoles } from '../api';
+import { Tenant, TenantCreate, TenantUpdate, TenantWithQuota, User, RoleResponse, PermissionCategory, PermissionResponse, TenantCloneRequest } from '../types';
+import { getTenants, createTenant, updateTenant, deleteTenant, getTenantById, resetTenantQuota, getPendingUsers, getRejectedUsers, approveUser, rejectUser, getRoles, updateTenantRoles, cloneTenant } from '../api';
 import { useTenant } from '../contexts/TenantContext';
 
 type TabType = 'tenants' | 'pending' | 'rejected';
@@ -128,6 +128,7 @@ export const TenantManagement: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showCloneModal, setShowCloneModal] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<TenantWithQuota | null>(null);
   const [selectedPendingUser, setSelectedPendingUser] = useState<User | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -142,6 +143,13 @@ export const TenantManagement: React.FC = () => {
     allowed_role_codes: [],
   });
   const [editFormData, setEditFormData] = useState<TenantUpdate>({});
+  const [cloneFormData, setCloneFormData] = useState<TenantCloneRequest>({
+    name: '',
+    code: '',
+    clone_roles: true,
+    clone_permissions: true,
+    clone_config: true,
+  });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -368,6 +376,74 @@ export const TenantManagement: React.FC = () => {
       setShowDetailModal(true);
     } catch (err) {
       console.error('获取租户详情失败:', err);
+    }
+  };
+
+  const handleOpenCloneModal = async (tenant: Tenant) => {
+    try {
+      const detail = await getTenantById(tenant.id);
+      setSelectedTenant(detail);
+      setCloneFormData({
+        name: `${detail.name} (副本)`,
+        code: `${detail.code}_COPY`,
+        clone_roles: true,
+        clone_permissions: true,
+        clone_config: true,
+      });
+      setFormError(null);
+      setShowCloneModal(true);
+    } catch (err) {
+      console.error('获取租户详情失败:', err);
+    }
+  };
+
+  const handleCloneInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setCloneFormData(prev => ({ 
+      ...prev, 
+      [name]: value 
+    }));
+  };
+
+  const handleCloneCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, checked } = e.target;
+    setCloneFormData(prev => ({ 
+      ...prev, 
+      [name]: checked 
+    }));
+  };
+
+  const handleCloneSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTenant) return;
+    
+    setFormError(null);
+    setSubmitting(true);
+
+    try {
+      console.log('='.repeat(60));
+      console.log('[TenantManagement] 开始克隆租户');
+      console.log(`[TenantManagement] 源租户ID: ${selectedTenant.id}, 名称: ${selectedTenant.name}`);
+      console.log(`[TenantManagement] 克隆配置: ${JSON.stringify(cloneFormData)}`);
+      console.log('='.repeat(60));
+      
+      const result = await cloneTenant(selectedTenant.id, cloneFormData);
+      
+      console.log('='.repeat(60));
+      console.log('[TenantManagement] ✅ 租户克隆成功');
+      console.log(`[TenantManagement] 新租户: ID=${result.id}, 名称=${result.name}, 代码=${result.code}`);
+      console.log(`[TenantManagement] 克隆统计: 角色=${result.cloned_roles_count}个, 权限=${result.cloned_permissions_count}个`);
+      console.log('='.repeat(60));
+      
+      setShowCloneModal(false);
+      fetchTenants();
+      
+      alert(`租户克隆成功！\n新租户: ${result.name} (${result.code})\n已克隆 ${result.cloned_roles_count} 个角色，${result.cloned_permissions_count} 个权限。`);
+    } catch (err) {
+      console.error('[TenantManagement] ❌ 克隆失败:', err);
+      setFormError(err instanceof Error ? err.message : '克隆租户失败');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -796,6 +872,35 @@ export const TenantManagement: React.FC = () => {
                                       }}
                                     >
                                       ✏️ 编辑
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setExpandedMenuId(null);
+                                        handleOpenCloneModal(tenant);
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        padding: '10px 16px',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        color: '#374151',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        transition: 'background 0.2s'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = '#f3f4f6';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'transparent';
+                                      }}
+                                    >
+                                      📋 克隆
                                     </button>
                                     {!isCurrentTenant(tenant) && (
                                       <button
@@ -1876,6 +1981,184 @@ export const TenantManagement: React.FC = () => {
                 {submitting ? '处理中...' : '确认驳回'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showCloneModal && selectedTenant && (
+        <div className="modal-overlay" onClick={() => setShowCloneModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', width: '90vw' }}>
+            <div className="modal-header">
+              <h3>克隆租户 - {selectedTenant.name}</h3>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={() => setShowCloneModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ 
+              padding: '0.75rem 1rem',
+              background: 'linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
+              borderLeft: '3px solid #667eea',
+              borderRadius: '4px',
+              marginBottom: '1rem',
+              fontSize: '0.875rem',
+              color: '#4c51bf'
+            }}>
+              ⚠️ 克隆将创建一个新的租户，并可选择复制源租户的角色、权限和配置。
+            </div>
+
+            {formError && (
+              <div className="error-message">{formError}</div>
+            )}
+
+            <form onSubmit={handleCloneSubmit}>
+              <h4 style={{ 
+                margin: '0 0 1rem', 
+                color: '#374151', 
+                fontSize: '1rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                📋 新租户信息
+              </h4>
+
+              <div className="form-group">
+                <label htmlFor="clone-name">新租户名称 <span className="required">*</span></label>
+                <input
+                  id="clone-name"
+                  name="name"
+                  type="text"
+                  value={cloneFormData.name}
+                  onChange={handleCloneInputChange}
+                  placeholder="例如：公司A (副本)"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="clone-code">新租户代码 <span className="required">*</span></label>
+                <input
+                  id="clone-code"
+                  name="code"
+                  type="text"
+                  value={cloneFormData.code}
+                  onChange={handleCloneInputChange}
+                  placeholder="例如：TENANT_A_COPY"
+                  required
+                />
+              </div>
+
+              <h4 style={{ 
+                margin: '1.5rem 0 1rem', 
+                color: '#374151', 
+                fontSize: '1rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                🎯 克隆维度选择
+              </h4>
+
+              <div style={{ 
+                background: '#f9fafb', 
+                padding: '1rem', 
+                borderRadius: '8px',
+                border: '1px solid #e5e7eb',
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: 0 }}>
+                      <input
+                        type="checkbox"
+                        name="clone_roles"
+                        checked={cloneFormData.clone_roles}
+                        onChange={handleCloneCheckboxChange}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0 }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#374151' }}>🎭 克隆角色</div>
+                        <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>
+                          复制源租户允许的角色列表。当前源租户允许 {selectedTenant.allowed_role_codes?.length || 0} 个角色。
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: 0 }}>
+                      <input
+                        type="checkbox"
+                        name="clone_permissions"
+                        checked={cloneFormData.clone_permissions}
+                        onChange={handleCloneCheckboxChange}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0 }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#374151' }}>🔑 克隆权限</div>
+                        <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>
+                          复制源租户角色关联的所有权限。权限通过角色间接关联。
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: 0 }}>
+                      <input
+                        type="checkbox"
+                        name="clone_config"
+                        checked={cloneFormData.clone_config}
+                        onChange={handleCloneCheckboxChange}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0 }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#374151' }}>⚙️ 克隆配置</div>
+                        <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>
+                          复制源租户的配额配置（行程上限: {selectedTenant.itinerary_limit}, AI调用上限: {selectedTenant.ai_calls_limit}）。
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div style={{ 
+                  marginTop: '1rem', 
+                  fontSize: '0.75rem', 
+                  color: '#6b7280',
+                  paddingTop: '0.75rem',
+                  borderTop: '1px solid #e5e7eb'
+                }}>
+                  <strong>💡 提示：</strong>
+                  <span style={{ marginLeft: '4px' }}>
+                    角色和权限是全局共享的，克隆操作会复制源租户对这些角色的引用关系，而不是创建新的角色实例。
+                  </span>
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e5e7eb' }}>
+                <button
+                  type="button"
+                  className="cancel-btn"
+                  onClick={() => setShowCloneModal(false)}
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="submit-btn"
+                  disabled={submitting}
+                >
+                  {submitting ? '克隆中...' : '确认克隆'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

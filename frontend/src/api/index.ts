@@ -14,6 +14,8 @@ import {
   TenantWithQuota,
   TenantCreate,
   TenantUpdate,
+  TenantCloneRequest,
+  TenantCloneResponse,
   QuotaUsage,
   User,
   RegisterRequest,
@@ -306,6 +308,13 @@ export async function updateTenantRoles(tenantId: number, roleCodes: string[]): 
     role_codes: roleCodes
   });
   console.log('[API] updateTenantRoles 成功:', response.data);
+  return response.data;
+}
+
+export async function cloneTenant(tenantId: number, cloneRequest: TenantCloneRequest): Promise<TenantCloneResponse> {
+  console.log('[API] 调用 cloneTenant:', tenantId, '克隆配置:', cloneRequest);
+  const response = await apiAxios.post<TenantCloneResponse>(`/tenants/${tenantId}/clone`, cloneRequest);
+  console.log('[API] cloneTenant 成功:', response.data);
   return response.data;
 }
 

@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 
 from app.models.tenant import (
@@ -7,7 +7,9 @@ from app.models.tenant import (
     TenantResponse, 
     TenantUpdate, 
     TenantWithQuota,
-    QuotaUsage
+    QuotaUsage,
+    TenantCloneRequest,
+    TenantCloneResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -249,6 +251,71 @@ class TenantService:
         }
         logger.info(f"[租户服务] 重置租户 {tenant.name} (ID: {tenant_id}) 的使用量")
         return True
+
+    def clone_tenant(self, source_tenant_id: int, clone_request: TenantCloneRequest) -> Optional[TenantCloneResponse]:
+        logger.info(f"[租户克隆服务] 开始克隆租户: 源租户ID={source_tenant_id}")
+        logger.info(f"[租户克隆服务] 克隆配置: 名称={clone_request.name}, 代码={clone_request.code}")
+        logger.info(f"[租户克隆服务] 克隆选项: 角色={clone_request.clone_roles}, 权限={clone_request.clone_permissions}, 配置={clone_request.clone_config}")
+        
+        source_tenant = self.get_tenant_by_id(source_tenant_id)
+        if source_tenant is None:
+            logger.error(f"[租户克隆服务] 克隆失败: 源租户 ID '{source_tenant_id}' 不存在")
+            return None
+        
+        if self.tenant_exists_by_code(clone_request.code):
+            logger.error(f"[租户克隆服务] 克隆失败: 租户代码 '{clone_request.code}' 已存在")
+            return None
+        
+        new_tenant_data = TenantCreate(
+            name=clone_request.name,
+            code=clone_request.code,
+            description=source_tenant.description,
+            logo_url=source_tenant.logo_url,
+        )
+        
+        if clone_request.clone_config:
+            new_tenant_data.itinerary_limit = source_tenant.itinerary_limit
+            new_tenant_data.ai_calls_limit = source_tenant.ai_calls_limit
+            logger.info(f"[租户克隆服务] 克隆配置: 行程上限={source_tenant.itinerary_limit}, AI调用上限={source_tenant.ai_calls_limit}")
+        
+        cloned_roles_count = 0
+        cloned_permissions_count = 0
+        
+        if clone_request.clone_roles:
+            new_tenant_data.allowed_role_codes = source_tenant.allowed_role_codes.copy() if source_tenant.allowed_role_codes else []
+            cloned_roles_count = len(new_tenant_data.allowed_role_codes)
+            logger.info(f"[租户克隆服务] 克隆角色: {new_tenant_data.allowed_role_codes} (共 {cloned_roles_count} 个)")
+        
+        if clone_request.clone_permissions:
+            cloned_permissions_count = self._count_permissions_for_roles(source_tenant.allowed_role_codes)
+            logger.info(f"[租户克隆服务] 克隆权限: 共 {cloned_permissions_count} 个权限（通过角色关联）")
+        
+        new_tenant = self.create_tenant(new_tenant_data)
+        
+        logger.info(f"[租户克隆服务] 租户克隆成功: 新租户ID={new_tenant.id}, 名称={new_tenant.name}")
+        
+        return TenantCloneResponse(
+            id=new_tenant.id,
+            name=new_tenant.name,
+            code=new_tenant.code,
+            cloned_roles_count=cloned_roles_count,
+            cloned_permissions_count=cloned_permissions_count,
+            message=f"租户克隆成功！已克隆 {cloned_roles_count} 个角色，{cloned_permissions_count} 个权限。"
+        )
+    
+    def _count_permissions_for_roles(self, role_codes: Optional[List[str]]) -> int:
+        from app.services.role_service import role_service
+        
+        if not role_codes:
+            return 0
+        
+        total_permissions = 0
+        for role_code in role_codes:
+            role = role_service.get_role_by_code(role_code)
+            if role:
+                total_permissions += len(role.permissions)
+        
+        return total_permissions
 
     def initialize_default_tenants(self):
         default_tenants = [
