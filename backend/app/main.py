@@ -1,6 +1,7 @@
 import logging
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
 from app.api.itinerary import router as itinerary_router
@@ -16,6 +17,7 @@ from app.services.user_service import user_service
 from app.services.tenant_service import tenant_service
 from app.models.role import RoleCreate
 from app.models.permission import PermissionCreate, PermissionCode
+from app.models.exceptions import BusinessException, ErrorCode
 from app.utils.log_broadcaster import log_broadcaster, setup_websocket_logging
 
 logging.basicConfig(level=logging.INFO)
@@ -243,6 +245,15 @@ app.include_router(permission_router, prefix="/api/permissions", tags=["权限�
 app.include_router(auth_router, prefix="/api/auth", tags=["认证"])
 app.include_router(stats_router, prefix="/api/stats", tags=["统计数据"])
 app.include_router(tenant_router, prefix="/api/tenants", tags=["租户管理"])
+
+
+@app.exception_handler(BusinessException)
+async def business_exception_handler(request: Request, exc: BusinessException):
+    logger.error(f"[业务异常] {exc}")
+    return JSONResponse(
+        status_code=200,
+        content=exc.to_dict()
+    )
 
 
 @app.get("/")
