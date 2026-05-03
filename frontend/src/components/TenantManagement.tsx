@@ -154,6 +154,12 @@ export const TenantManagement: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const [selectedTenantIds, setSelectedTenantIds] = useState<Set<number>>(new Set());
+  const [showBatchDisableModal, setShowBatchDisableModal] = useState(false);
+  const [showBatchEnableModal, setShowBatchEnableModal] = useState(false);
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
+  const [updatedTenantIds, setUpdatedTenantIds] = useState<Set<number>>(new Set());
+
   const { currentTenant, refreshTenant } = useTenant();
   const toast = useToast();
 
@@ -163,10 +169,171 @@ export const TenantManagement: React.FC = () => {
     try {
       const data = await getTenants();
       setTenants(data);
+      setSelectedTenantIds(new Set());
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取租户列表失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allIds = new Set(tenants.map(t => t.id));
+      setSelectedTenantIds(allIds);
+    } else {
+      setSelectedTenantIds(new Set());
+    }
+  };
+
+  const handleSelectTenant = (tenantId: number, checked: boolean) => {
+    setSelectedTenantIds(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(tenantId);
+      } else {
+        newSet.delete(tenantId);
+      }
+      return newSet;
+    });
+  };
+
+  const isAllSelected = tenants.length > 0 && selectedTenantIds.size === tenants.length;
+  const isSomeSelected = selectedTenantIds.size > 0 && selectedTenantIds.size < tenants.length;
+
+  const getSelectedTenants = () => {
+    return tenants.filter(t => selectedTenantIds.has(t.id));
+  };
+
+  const handleBatchDisable = async () => {
+    const selectedTenants = getSelectedTenants();
+    const activeTenants = selectedTenants.filter(t => t.is_active);
+    
+    if (activeTenants.length === 0) {
+      toast.warning('所选租户均已处于禁用状态', '无需操作');
+      return;
+    }
+
+    setSubmitting(true);
+    let successCount = 0;
+    const failedIds: number[] = [];
+
+    try {
+      for (const tenant of activeTenants) {
+        try {
+          await updateTenant(tenant.id, { is_active: false });
+          successCount++;
+          setUpdatedTenantIds(prev => new Set([...prev, tenant.id]));
+        } catch (err) {
+          console.error(`禁用租户 ${tenant.name} 失败:`, err);
+          failedIds.push(tenant.id);
+        }
+      }
+
+      setTimeout(() => {
+        setUpdatedTenantIds(new Set());
+      }, 1000);
+
+      if (successCount > 0) {
+        toast.success(`成功禁用 ${successCount} 个租户`, '批量禁用成功');
+      }
+      if (failedIds.length > 0) {
+        toast.error(`禁用 ${failedIds.length} 个租户失败`, '批量禁用部分失败');
+      }
+
+      fetchTenants();
+    } catch (err) {
+      console.error('批量禁用失败:', err);
+      toast.error('批量禁用操作失败', '操作失败');
+    } finally {
+      setSubmitting(false);
+      setShowBatchDisableModal(false);
+    }
+  };
+
+  const handleBatchEnable = async () => {
+    const selectedTenants = getSelectedTenants();
+    const inactiveTenants = selectedTenants.filter(t => !t.is_active);
+    
+    if (inactiveTenants.length === 0) {
+      toast.warning('所选租户均已处于启用状态', '无需操作');
+      return;
+    }
+
+    setSubmitting(true);
+    let successCount = 0;
+    const failedIds: number[] = [];
+
+    try {
+      for (const tenant of inactiveTenants) {
+        try {
+          await updateTenant(tenant.id, { is_active: true });
+          successCount++;
+          setUpdatedTenantIds(prev => new Set([...prev, tenant.id]));
+        } catch (err) {
+          console.error(`启用租户 ${tenant.name} 失败:`, err);
+          failedIds.push(tenant.id);
+        }
+      }
+
+      setTimeout(() => {
+        setUpdatedTenantIds(new Set());
+      }, 1000);
+
+      if (successCount > 0) {
+        toast.success(`成功启用 ${successCount} 个租户`, '批量启用成功');
+      }
+      if (failedIds.length > 0) {
+        toast.error(`启用 ${failedIds.length} 个租户失败`, '批量启用部分失败');
+      }
+
+      fetchTenants();
+    } catch (err) {
+      console.error('批量启用失败:', err);
+      toast.error('批量启用操作失败', '操作失败');
+    } finally {
+      setSubmitting(false);
+      setShowBatchEnableModal(false);
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    const selectedTenants = getSelectedTenants();
+    
+    if (selectedTenants.length === 0) {
+      toast.warning('请先选择要删除的租户', '未选择租户');
+      return;
+    }
+
+    setSubmitting(true);
+    let successCount = 0;
+    const failedIds: number[] = [];
+
+    try {
+      for (const tenant of selectedTenants) {
+        try {
+          await deleteTenant(tenant.id);
+          successCount++;
+        } catch (err) {
+          console.error(`删除租户 ${tenant.name} 失败:`, err);
+          failedIds.push(tenant.id);
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`成功删除 ${successCount} 个租户`, '批量删除成功');
+      }
+      if (failedIds.length > 0) {
+        toast.error(`删除 ${failedIds.length} 个租户失败`, '批量删除部分失败');
+      }
+
+      fetchTenants();
+    } catch (err) {
+      console.error('批量删除失败:', err);
+      toast.error('批量删除操作失败', '操作失败');
+    } finally {
+      setSubmitting(false);
+      setShowBatchDeleteModal(false);
     }
   };
 
@@ -672,6 +839,128 @@ export const TenantManagement: React.FC = () => {
 
         {activeTab === 'tenants' ? (
           <div>
+            {selectedTenantIds.size > 0 && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                padding: '0.75rem 1rem',
+                background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
+                borderLeft: '3px solid #667eea',
+                borderRadius: '8px',
+                marginBottom: '1rem'
+              }}>
+                <span style={{ fontWeight: 600, color: '#4c51bf' }}>
+                  已选择 <span style={{ fontSize: '1.1rem' }}>{selectedTenantIds.size}</span> 个租户
+                </span>
+                <div style={{ display: 'flex', gap: '0.5rem', marginLeft: 'auto' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowBatchEnableModal(true)}
+                    style={{
+                      padding: '6px 16px',
+                      background: '#10b981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#059669';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#10b981';
+                    }}
+                  >
+                    ▶ 批量启用
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBatchDisableModal(true)}
+                    style={{
+                      padding: '6px 16px',
+                      background: '#f59e0b',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#d97706';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#f59e0b';
+                    }}
+                  >
+                    ⏸ 批量禁用
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBatchDeleteModal(true)}
+                    style={{
+                      padding: '6px 16px',
+                      background: '#ef4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#dc2626';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#ef4444';
+                    }}
+                  >
+                    🗑 批量删除
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTenantIds(new Set())}
+                    style={{
+                      padding: '6px 16px',
+                      background: '#f3f4f6',
+                      color: '#374151',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#e5e7eb';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#f3f4f6';
+                    }}
+                  >
+                    ✕ 取消选择
+                  </button>
+                </div>
+              </div>
+            )}
             {loading ? (
               <div className="loading">加载中...</div>
             ) : (
@@ -679,6 +968,26 @@ export const TenantManagement: React.FC = () => {
                 <table className="tenant-table">
                   <thead>
                     <tr>
+                      <th style={{ width: '50px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', justifyContent: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={isAllSelected}
+                            ref={(input) => {
+                              if (input) {
+                                input.indeterminate = isSomeSelected;
+                              }
+                            }}
+                            onChange={(e) => handleSelectAll(e.target.checked)}
+                            style={{
+                              width: '18px',
+                              height: '18px',
+                              cursor: 'pointer',
+                              margin: 0
+                            }}
+                          />
+                        </label>
+                      </th>
                       <th>ID</th>
                       <th>租户名称</th>
                       <th>代码</th>
@@ -691,7 +1000,7 @@ export const TenantManagement: React.FC = () => {
                   <tbody>
                     {tenants.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="empty-row">
+                        <td colSpan={8} className="empty-row">
                           暂无租户数据
                         </td>
                       </tr>
@@ -704,14 +1013,41 @@ export const TenantManagement: React.FC = () => {
                           ? Math.min((tenant.ai_calls_used / tenant.ai_calls_limit) * 100, 100) 
                           : 0;
                         
+                        const isSelected = selectedTenantIds.has(tenant.id);
+                        const isUpdated = updatedTenantIds.has(tenant.id);
+                        
                         return (
                           <tr 
                             key={tenant.id}
-                            style={isCurrentTenant(tenant) ? {
-                              background: 'linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
-                              borderLeft: '3px solid #667eea'
-                            } : {}}
+                            style={{
+                              background: isUpdated 
+                                ? (tenant.is_active 
+                                    ? 'linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.1) 100%)' 
+                                    : 'linear-gradient(90deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.1) 100%)')
+                                : isSelected 
+                                  ? 'linear-gradient(90deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.1) 100%)'
+                                  : isCurrentTenant(tenant) 
+                                    ? 'linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)'
+                                    : 'transparent',
+                              borderLeft: isCurrentTenant(tenant) ? '3px solid #667eea' : (isSelected ? '3px solid #667eea' : 'none'),
+                              transition: 'all 0.3s ease-in-out'
+                            }}
                           >
+                            <td>
+                              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', justifyContent: 'center' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => handleSelectTenant(tenant.id, e.target.checked)}
+                                  style={{
+                                    width: '18px',
+                                    height: '18px',
+                                    cursor: 'pointer',
+                                    margin: 0
+                                  }}
+                                />
+                              </label>
+                            </td>
                             <td>
                               {tenant.id}
                               {isCurrentTenant(tenant) && (
@@ -789,7 +1125,13 @@ export const TenantManagement: React.FC = () => {
                                   fontSize: '0.875rem',
                                   fontWeight: 500,
                                   background: tenant.is_active ? '#d1fae5' : '#fee2e2',
-                                  color: tenant.is_active ? '#065f46' : '#dc2626'
+                                  color: tenant.is_active ? '#065f46' : '#dc2626',
+                                  transition: 'all 0.3s ease-in-out',
+                                  boxShadow: isUpdated 
+                                    ? (tenant.is_active 
+                                        ? '0 0 8px rgba(16, 185, 129, 0.6)' 
+                                        : '0 0 8px rgba(239, 68, 68, 0.6)')
+                                    : 'none'
                                 }}
                               >
                                 {tenant.is_active ? '✓ 激活' : '✗ 停用'}
@@ -2185,6 +2527,310 @@ export const TenantManagement: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showBatchEnableModal && (
+        <div className="modal-overlay" onClick={() => setShowBatchEnableModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>确认批量启用</h3>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={() => setShowBatchEnableModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ 
+                padding: '1rem',
+                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%)',
+                borderLeft: '3px solid #10b981',
+                borderRadius: '8px',
+                marginBottom: '1rem'
+              }}>
+                <div style={{ fontWeight: 600, color: '#065f46', marginBottom: '0.5rem' }}>
+                  即将启用以下租户：
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>已选择 {selectedTenantIds.size} 个租户</strong>
+                  </div>
+                  <div style={{ 
+                    maxHeight: '150px', 
+                    overflowY: 'auto',
+                    background: 'white',
+                    padding: '0.75rem',
+                    borderRadius: '6px',
+                    border: '1px solid #d1fae5'
+                  }}>
+                    {getSelectedTenants().map(tenant => (
+                      <div key={tenant.id} style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '0.5rem',
+                        padding: '4px 0',
+                        borderBottom: '1px solid #f3f4f6'
+                      }}>
+                        <span style={{ 
+                          padding: '2px 8px', 
+                          borderRadius: '9999px',
+                          fontSize: '0.75rem',
+                          background: tenant.is_active ? '#d1fae5' : '#fee2e2',
+                          color: tenant.is_active ? '#065f46' : '#dc2626'
+                        }}>
+                          {tenant.is_active ? '已启用' : '已禁用'}
+                        </span>
+                        <span style={{ fontWeight: 500 }}>{tenant.name}</span>
+                        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>({tenant.code})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                <strong>⚠️ 注意：</strong> 此操作将启用所选租户中当前处于禁用状态的租户。启用后，这些租户的用户将可以正常登录和使用系统。
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="cancel-btn"
+                onClick={() => setShowBatchEnableModal(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleBatchEnable}
+                disabled={submitting}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  opacity: submitting ? 0.5 : 1,
+                  transition: 'all 0.2s'
+                }}
+              >
+                {submitting ? '处理中...' : '确认启用'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBatchDisableModal && (
+        <div className="modal-overlay" onClick={() => setShowBatchDisableModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>确认批量禁用</h3>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={() => setShowBatchDisableModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ 
+                padding: '1rem',
+                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%)',
+                borderLeft: '3px solid #f59e0b',
+                borderRadius: '8px',
+                marginBottom: '1rem'
+              }}>
+                <div style={{ fontWeight: 600, color: '#92400e', marginBottom: '0.5rem' }}>
+                  即将禁用以下租户：
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>已选择 {selectedTenantIds.size} 个租户</strong>
+                  </div>
+                  <div style={{ 
+                    maxHeight: '150px', 
+                    overflowY: 'auto',
+                    background: 'white',
+                    padding: '0.75rem',
+                    borderRadius: '6px',
+                    border: '1px solid #fef3c7'
+                  }}>
+                    {getSelectedTenants().map(tenant => (
+                      <div key={tenant.id} style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '0.5rem',
+                        padding: '4px 0',
+                        borderBottom: '1px solid #f3f4f6'
+                      }}>
+                        <span style={{ 
+                          padding: '2px 8px', 
+                          borderRadius: '9999px',
+                          fontSize: '0.75rem',
+                          background: tenant.is_active ? '#d1fae5' : '#fee2e2',
+                          color: tenant.is_active ? '#065f46' : '#dc2626'
+                        }}>
+                          {tenant.is_active ? '已启用' : '已禁用'}
+                        </span>
+                        <span style={{ fontWeight: 500 }}>{tenant.name}</span>
+                        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>({tenant.code})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                <strong>⚠️ 注意：</strong> 此操作将禁用所选租户中当前处于启用状态的租户。禁用后，这些租户的用户将无法登录系统。此操作不会删除租户数据，可随时重新启用。
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="cancel-btn"
+                onClick={() => setShowBatchDisableModal(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleBatchDisable}
+                disabled={submitting}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: '#f59e0b',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  opacity: submitting ? 0.5 : 1,
+                  transition: 'all 0.2s'
+                }}
+              >
+                {submitting ? '处理中...' : '确认禁用'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBatchDeleteModal && (
+        <div className="modal-overlay" onClick={() => setShowBatchDeleteModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>确认批量删除</h3>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={() => setShowBatchDeleteModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ 
+                padding: '1rem',
+                background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.1) 100%)',
+                borderLeft: '3px solid #ef4444',
+                borderRadius: '8px',
+                marginBottom: '1rem'
+              }}>
+                <div style={{ fontWeight: 600, color: '#991b1b', marginBottom: '0.5rem' }}>
+                  即将删除以下租户：
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>已选择 {selectedTenantIds.size} 个租户</strong>
+                  </div>
+                  <div style={{ 
+                    maxHeight: '150px', 
+                    overflowY: 'auto',
+                    background: 'white',
+                    padding: '0.75rem',
+                    borderRadius: '6px',
+                    border: '1px solid #fee2e2'
+                  }}>
+                    {getSelectedTenants().map(tenant => (
+                      <div key={tenant.id} style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '0.5rem',
+                        padding: '4px 0',
+                        borderBottom: '1px solid #f3f4f6'
+                      }}>
+                        <span style={{ fontWeight: 500 }}>{tenant.name}</span>
+                        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>({tenant.code})</span>
+                        {isCurrentTenant(tenant) && (
+                          <span style={{ 
+                            padding: '2px 8px', 
+                            borderRadius: '9999px',
+                            fontSize: '0.75rem',
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            color: 'white'
+                          }}>
+                            当前租户
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                <strong>⚠️ 重要警告：</strong> 此操作将永久删除所选租户及其相关数据（包括用户、行程等）。此操作不可恢复，请谨慎操作。
+                {getSelectedTenants().some(t => isCurrentTenant(t)) && (
+                  <div style={{ marginTop: '0.5rem', color: '#ef4444', fontWeight: 500 }}>
+                    ⚠️ 您选择了当前登录的租户，该租户将不会被删除。
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="cancel-btn"
+                onClick={() => setShowBatchDeleteModal(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleBatchDelete}
+                disabled={submitting}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  opacity: submitting ? 0.5 : 1,
+                  transition: 'all 0.2s'
+                }}
+              >
+                {submitting ? '处理中...' : '确认删除'}
+              </button>
+            </div>
           </div>
         </div>
       )}
