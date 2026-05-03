@@ -11,12 +11,13 @@ from app.api.permission import router as permission_router
 from app.api.auth import router as auth_router
 from app.api.stats import router as stats_router
 from app.api.tenant import router as tenant_router
+from app.api.audit import router as audit_router
 from app.services.role_service import role_service
 from app.services.permission_service import permission_service
 from app.services.user_service import user_service
 from app.services.tenant_service import tenant_service
 from app.models.role import RoleCreate
-from app.models.permission import PermissionCreate, PermissionCode
+from app.models.permission import PermissionCreate, PermissionCode, PermissionType, PermissionCategory
 from app.models.exceptions import BusinessException, ErrorCode
 from app.utils.log_broadcaster import log_broadcaster, setup_websocket_logging
 
@@ -157,6 +158,13 @@ def initialize_permissions():
             permission_type=PermissionType.MENU,
             category=PermissionCategory.MENU_VISIBILITY,
             description="访问权限管理菜单的权限"
+        ),
+        PermissionCreate(
+            name="审计日志",
+            code=PermissionCode.MENU_AUDIT_LOGS,
+            permission_type=PermissionType.MENU,
+            category=PermissionCategory.MENU_VISIBILITY,
+            description="访问审计日志菜单的权限"
         )
     ]
     
@@ -245,6 +253,7 @@ app.include_router(permission_router, prefix="/api/permissions", tags=["权限�
 app.include_router(auth_router, prefix="/api/auth", tags=["认证"])
 app.include_router(stats_router, prefix="/api/stats", tags=["统计数据"])
 app.include_router(tenant_router, prefix="/api/tenants", tags=["租户管理"])
+app.include_router(audit_router, prefix="/api/audit-logs", tags=["审计日志"])
 
 
 @app.exception_handler(BusinessException)

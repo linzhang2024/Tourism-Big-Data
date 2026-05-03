@@ -33,6 +33,7 @@ class PermissionCode(str, Enum):
     MENU_INSIGHTS = "menu:insights"
     MENU_ITINERARY = "menu:itinerary"
     MENU_PROFILE = "menu:profile"
+    MENU_AUDIT_LOGS = "menu:audit-logs"
 
 
 PERMISSION_CATEGORY_MAP = {
@@ -51,6 +52,7 @@ PERMISSION_CATEGORY_MAP = {
     PermissionCode.MENU_INSIGHTS: PermissionCategory.MENU_VISIBILITY,
     PermissionCode.MENU_ITINERARY: PermissionCategory.MENU_VISIBILITY,
     PermissionCode.MENU_PROFILE: PermissionCategory.MENU_VISIBILITY,
+    PermissionCode.MENU_AUDIT_LOGS: PermissionCategory.MENU_VISIBILITY,
 }
 
 

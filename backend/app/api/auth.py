@@ -8,6 +8,8 @@ from app.models.user import LoginRequest, LoginResponse, UserResponse, UserCreat
 from app.services.user_service import user_service
 from app.services.role_service import role_service
 from app.services.tenant_service import tenant_service
+from app.services.audit_log_service import audit_log_service
+from app.models.audit_log import OperationType, OperationStatus
 from app.utils.jwt_utils import jwt_utils
 from app.utils.tenant_context import tenant_context
 
@@ -339,11 +341,27 @@ async def approve_user(
     approved_user = user_service.approve_user(user_id)
     
     if not approved_user:
+        audit_log_service.log_operation(
+            operation_type=OperationType.USER_APPROVE,
+            operator_id=current_user.id,
+            operator_name=current_user.username,
+            target_type="USER",
+            target_id=user_id,
+            status=OperationStatus.FAILED,
+            error_message="用户不存在或状态不是待审核"
+        )
         logger.warning(f"[认证 API] 审批失败: 用户 ID={user_id} 不存在或状态不是待审核")
         raise HTTPException(
             status_code=400,
             detail="用户不存在或状态不是待审核"
         )
+    
+    audit_log_service.log_user_approve(
+        user_id=approved_user.id,
+        username=approved_user.username,
+        operator_name=current_user.username,
+        operator_id=current_user.id
+    )
     
     logger.info(f"[认证 API] 用户 ID={user_id} 审批通过成功")
     return approved_user
@@ -364,13 +382,34 @@ async def reject_user(
             detail="无权限执行驳回操作"
         )
     
+    pending_user = user_service.get_user_by_id(user_id)
+    
     success = user_service.reject_user(user_id, reject_request.reason)
     
     if not success:
+        audit_log_service.log_operation(
+            operation_type=OperationType.USER_REJECT,
+            operator_id=current_user.id,
+            operator_name=current_user.username,
+            target_type="USER",
+            target_id=user_id,
+            target_name=pending_user.username if pending_user else None,
+            status=OperationStatus.FAILED,
+            error_message="用户不存在或状态不是待审核"
+        )
         logger.warning(f"[认证 API] 驳回失败: 用户 ID={user_id} 不存在或状态不是待审核")
         raise HTTPException(
             status_code=400,
             detail="用户不存在或状态不是待审核"
+        )
+    
+    if pending_user:
+        audit_log_service.log_user_reject(
+            user_id=pending_user.id,
+            username=pending_user.username,
+            reason=reject_request.reason,
+            operator_name=current_user.username,
+            operator_id=current_user.id
         )
     
     logger.info(f"[认证 API] 用户 ID={user_id} 驳回成功")

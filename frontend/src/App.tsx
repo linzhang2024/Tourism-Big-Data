@@ -4,6 +4,7 @@ import { RoleManagement } from './components/RoleManagement';
 import { PermissionManagement } from './components/PermissionManagement';
 import { ItineraryManagement } from './components/ItineraryManagement';
 import { TenantManagement } from './components/TenantManagement';
+import { AuditLogManagement } from './components/AuditLogManagement';
 import Dashboard from './components/Dashboard';
 import DataInsights from './components/DataInsights';
 import LoginPage from './components/LoginPage';
@@ -12,7 +13,7 @@ import { useAuth } from './contexts/AuthContext';
 import { useTenant } from './contexts/TenantContext';
 import './App.css';
 
-type TabType = 'dashboard' | 'insights' | 'itinerary' | 'roles' | 'permissions' | 'tenants' | 'profile';
+type TabType = 'dashboard' | 'insights' | 'itinerary' | 'roles' | 'permissions' | 'tenants' | 'audit-logs' | 'profile';
 
 const MainApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -58,6 +59,7 @@ const MainApp: React.FC = () => {
   const canViewTenants = hasPermission('menu:tenants');
   const canViewRoles = hasPermission('menu:roles');
   const canViewPermissions = hasPermission('menu:permissions');
+  const canViewAuditLogs = hasPermission('menu:audit-logs');
   
   const canAccessUserManagement = canViewTenants || canViewRoles || canViewPermissions;
 
@@ -66,13 +68,14 @@ const MainApp: React.FC = () => {
     setUserMenuOpen(false);
   };
 
-  const isUserManagementActive = activeTab === 'tenants' || activeTab === 'roles' || activeTab === 'permissions';
+  const isUserManagementActive = activeTab === 'tenants' || activeTab === 'roles' || activeTab === 'permissions' || activeTab === 'audit-logs';
 
   const getActiveTabName = () => {
     switch (activeTab) {
       case 'tenants': return '租户管理';
       case 'roles': return '角色管理';
       case 'permissions': return '权限管理';
+      case 'audit-logs': return '审计日志';
       default: return '用户管理';
     }
   };
@@ -310,6 +313,27 @@ const MainApp: React.FC = () => {
                       }}
                     >
                       🔐 权限管理
+                    </button>
+                  )}
+                  {canViewAuditLogs && (
+                    <button
+                      onClick={() => handleTabClick('audit-logs')}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        border: 'none',
+                        background: activeTab === 'audit-logs' ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)' : 'transparent',
+                        color: '#374151',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: activeTab === 'audit-logs' ? 600 : 400,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      📋 审计日志
                     </button>
                   )}
                 </div>
@@ -587,6 +611,8 @@ const MainApp: React.FC = () => {
             <PermissionManagement />
           ) : activeTab === 'tenants' ? (
             <TenantManagement />
+          ) : activeTab === 'audit-logs' ? (
+            <AuditLogManagement />
           ) : (
             <Dashboard />
           )}

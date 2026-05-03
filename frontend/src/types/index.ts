@@ -268,3 +268,55 @@ export interface TenantCloneResponse {
   cloned_permissions_count: number;
   message: string;
 }
+
+export type OperationType = 
+  | 'tenant:create'
+  | 'tenant:update'
+  | 'tenant:delete'
+  | 'tenant:clone'
+  | 'tenant:enable'
+  | 'tenant:disable'
+  | 'role:create'
+  | 'role:update'
+  | 'role:delete'
+  | 'permission:create'
+  | 'permission:update'
+  | 'permission:delete'
+  | 'user:approve'
+  | 'user:reject'
+  | 'itinerary:create'
+  | 'itinerary:update'
+  | 'itinerary:delete'
+  | 'quota:reset'
+  | 'role:permission:update'
+  | 'tenant:role:update';
+
+export type OperationStatus = 'success' | 'failed';
+
+export interface AuditLog {
+  id: number;
+  operation_type: OperationType;
+  operator_id: number | null;
+  operator_name: string | null;
+  target_type: string | null;
+  target_id: number | null;
+  target_name: string | null;
+  details: Record<string, any> | null;
+  status: OperationStatus;
+  error_message: string | null;
+  tenant_id: number | null;
+  created_at: string;
+}
+
+export interface AuditLogPagedResponse {
+  items: AuditLog[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface OperationTypeOption {
+  value: OperationType;
+  label: string;
+}
