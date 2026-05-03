@@ -375,8 +375,8 @@ export interface GetAuditLogsParams {
   operation_type?: OperationType;
   operator_name?: string;
   status?: 'success' | 'failed';
-  start_time?: string;
-  end_time?: string;
+  start_date?: string;
+  end_date?: string;
 }
 
 export async function getAuditLogs(params: GetAuditLogsParams = {}): Promise<AuditLogPagedResponse> {
@@ -389,8 +389,8 @@ export async function getAuditLogs(params: GetAuditLogsParams = {}): Promise<Aud
   if (params.operation_type) queryParams['operation_type'] = params.operation_type;
   if (params.operator_name) queryParams['operator_name'] = params.operator_name;
   if (params.status) queryParams['status'] = params.status;
-  if (params.start_time) queryParams['start_time'] = params.start_time;
-  if (params.end_time) queryParams['end_time'] = params.end_time;
+  if (params.start_date) queryParams['start_date'] = params.start_date;
+  if (params.end_date) queryParams['end_date'] = params.end_date;
 
   const response = await apiAxios.get<AuditLogPagedResponse>('/audit-logs/', {
     params: queryParams
