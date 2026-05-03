@@ -169,7 +169,6 @@ export const TenantManagement: React.FC = () => {
     try {
       const data = await getTenants();
       setTenants(data);
-      setSelectedTenantIds(new Set());
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取租户列表失败');
     } finally {
@@ -217,13 +216,23 @@ export const TenantManagement: React.FC = () => {
     setSubmitting(true);
     let successCount = 0;
     const failedIds: number[] = [];
+    const successfullyUpdatedIds: number[] = [];
 
     try {
       for (const tenant of activeTenants) {
         try {
           await updateTenant(tenant.id, { is_active: false });
           successCount++;
+          successfullyUpdatedIds.push(tenant.id);
           setUpdatedTenantIds(prev => new Set([...prev, tenant.id]));
+          
+          setTenants(prevTenants => 
+            prevTenants.map(t => 
+              t.id === tenant.id 
+                ? { ...t, is_active: false } 
+                : t
+            )
+          );
         } catch (err) {
           console.error(`禁用租户 ${tenant.name} 失败:`, err);
           failedIds.push(tenant.id);
@@ -241,7 +250,7 @@ export const TenantManagement: React.FC = () => {
         toast.error(`禁用 ${failedIds.length} 个租户失败`, '批量禁用部分失败');
       }
 
-      fetchTenants();
+      await fetchTenants();
     } catch (err) {
       console.error('批量禁用失败:', err);
       toast.error('批量禁用操作失败', '操作失败');
@@ -270,6 +279,14 @@ export const TenantManagement: React.FC = () => {
           await updateTenant(tenant.id, { is_active: true });
           successCount++;
           setUpdatedTenantIds(prev => new Set([...prev, tenant.id]));
+          
+          setTenants(prevTenants => 
+            prevTenants.map(t => 
+              t.id === tenant.id 
+                ? { ...t, is_active: true } 
+                : t
+            )
+          );
         } catch (err) {
           console.error(`启用租户 ${tenant.name} 失败:`, err);
           failedIds.push(tenant.id);
@@ -287,7 +304,7 @@ export const TenantManagement: React.FC = () => {
         toast.error(`启用 ${failedIds.length} 个租户失败`, '批量启用部分失败');
       }
 
-      fetchTenants();
+      await fetchTenants();
     } catch (err) {
       console.error('批量启用失败:', err);
       toast.error('批量启用操作失败', '操作失败');
@@ -308,12 +325,24 @@ export const TenantManagement: React.FC = () => {
     setSubmitting(true);
     let successCount = 0;
     const failedIds: number[] = [];
+    const successfullyDeletedIds: number[] = [];
 
     try {
       for (const tenant of selectedTenants) {
         try {
           await deleteTenant(tenant.id);
           successCount++;
+          successfullyDeletedIds.push(tenant.id);
+          
+          setTenants(prevTenants => 
+            prevTenants.filter(t => t.id !== tenant.id)
+          );
+          
+          setSelectedTenantIds(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(tenant.id);
+            return newSet;
+          });
         } catch (err) {
           console.error(`删除租户 ${tenant.name} 失败:`, err);
           failedIds.push(tenant.id);
@@ -327,7 +356,7 @@ export const TenantManagement: React.FC = () => {
         toast.error(`删除 ${failedIds.length} 个租户失败`, '批量删除部分失败');
       }
 
-      fetchTenants();
+      await fetchTenants();
     } catch (err) {
       console.error('批量删除失败:', err);
       toast.error('批量删除操作失败', '操作失败');
@@ -967,8 +996,8 @@ export const TenantManagement: React.FC = () => {
               <div className="table-container">
                 <table className="tenant-table">
                   <thead>
-                    <tr>
-                      <th style={{ width: '50px' }}>
+                    <tr style={{ width: '100%' }}>
+                      <th style={{ width: '50px', minWidth: '50px' }}>
                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', justifyContent: 'center' }}>
                           <input
                             type="checkbox"
@@ -988,13 +1017,13 @@ export const TenantManagement: React.FC = () => {
                           />
                         </label>
                       </th>
-                      <th>ID</th>
-                      <th>租户名称</th>
-                      <th>代码</th>
-                      <th>资源概览</th>
-                      <th>状态</th>
-                      <th>创建时间</th>
-                      <th>操作</th>
+                      <th style={{ width: '80px', minWidth: '80px' }}>ID</th>
+                      <th style={{ width: '20%', minWidth: '150px' }}>租户名称</th>
+                      <th style={{ width: '12%', minWidth: '100px' }}>代码</th>
+                      <th style={{ width: '30%', minWidth: '250px' }}>资源概览</th>
+                      <th style={{ width: '10%', minWidth: '80px' }}>状态</th>
+                      <th style={{ width: '15%', minWidth: '160px' }}>创建时间</th>
+                      <th style={{ width: '10%', minWidth: '100px' }}>操作</th>
                     </tr>
                   </thead>
                   <tbody>
