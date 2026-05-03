@@ -48,9 +48,11 @@ class TenantService:
     def get_all_tenants(self) -> List[TenantResponse]:
         return [t for t in self.tenants if t.is_active]
 
-    def get_tenant_by_id(self, tenant_id: int) -> Optional[TenantResponse]:
+    def get_tenant_by_id(self, tenant_id: int, include_inactive: bool = False) -> Optional[TenantResponse]:
         for tenant in self.tenants:
-            if tenant.id == tenant_id and tenant.is_active:
+            if tenant.id == tenant_id:
+                if not include_inactive and not tenant.is_active:
+                    continue
                 usage = self.tenant_usage.get(tenant_id, {'itinerary_used': 0, 'ai_calls_used': 0})
                 tenant.itinerary_used = usage['itinerary_used']
                 tenant.ai_calls_used = usage['ai_calls_used']

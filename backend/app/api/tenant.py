@@ -12,6 +12,7 @@ from app.models.tenant import (
     TenantCloneRequest,
     TenantCloneResponse
 )
+from app.models.exceptions import BusinessException, ErrorCode
 from app.services.tenant_service import tenant_service
 from app.services.user_service import user_service
 
@@ -259,29 +260,35 @@ async def clone_tenant(tenant_id: int, clone_request: TenantCloneRequest):
     logger.info(f"[租户克隆API] 克隆选项: 角色={clone_request.clone_roles}, 权限={clone_request.clone_permissions}, 配置={clone_request.clone_config}")
     logger.info("=" * 60)
     
-    source_tenant = tenant_service.get_tenant_by_id(tenant_id)
+    source_tenant = tenant_service.get_tenant_by_id(tenant_id, include_inactive=True)
     if source_tenant is None:
         logger.error(f"[租户克隆API] 克隆失败: 源租户 ID '{tenant_id}' 不存在")
-        raise HTTPException(
-            status_code=404,
-            detail=f"源租户 ID '{tenant_id}' 不存在"
+        raise BusinessException(
+            code=ErrorCode.TENANT_NOT_FOUND,
+            tenant_id=tenant_id
         )
     
     logger.info(f"[租户克隆API] 找到源租户: name='{source_tenant.name}', code='{source_tenant.code}'")
     
+    if not source_tenant.is_active:
+        logger.error(f"[租户克隆API] 克隆失败: 源租户 '{source_tenant.name}' 已被禁用")
+        raise BusinessException(
+            code=ErrorCode.TENANT_DISABLED,
+            tenant_name=source_tenant.name
+        )
+    
     if tenant_service.tenant_exists_by_code(clone_request.code):
         logger.error(f"[租户克隆API] 克隆失败: 租户代码 '{clone_request.code}' 已存在")
-        raise HTTPException(
-            status_code=400,
-            detail=f"租户代码 '{clone_request.code}' 已存在"
+        raise BusinessException(
+            code=ErrorCode.TENANT_CODE_EXISTS,
+            tenant_code=clone_request.code
         )
     
     cloned_tenant = tenant_service.clone_tenant(tenant_id, clone_request)
     if cloned_tenant is None:
         logger.error(f"[租户克隆API] 克隆失败: tenant_service.clone_tenant 返回 None")
-        raise HTTPException(
-            status_code=500,
-            detail="克隆租户失败"
+        raise BusinessException(
+            code=ErrorCode.INTERNAL_ERROR
         )
     
     logger.info("=" * 60)

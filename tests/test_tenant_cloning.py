@@ -202,7 +202,7 @@ class TestTenantCloningPerformance:
     
     @pytest.mark.asyncio
     async def test_clone_duplicate_code(self):
-        """测试克隆使用已存在的租户代码应返回错误"""
+        """测试克隆使用已存在的租户代码应返回业务错误码 40001"""
         
         async with AsyncClient(app=app, base_url="http://test") as client:
             create_response = await client.post(
@@ -229,12 +229,21 @@ class TestTenantCloningPerformance:
                 }
             )
         
-        assert clone_response.status_code == 400, f"期望返回400错误，实际: {clone_response.status_code}"
-        assert "已存在" in clone_response.json()["detail"]
+        assert clone_response.status_code == 200, f"期望返回200状态码（业务错误通过code字段区分），实际: {clone_response.status_code}"
+        
+        error_data = clone_response.json()
+        print(f"\n[错误响应验证] 重复代码错误响应: {error_data}")
+        
+        assert "code" in error_data, "错误响应应包含 code 字段"
+        assert "message" in error_data, "错误响应应包含 message 字段"
+        assert error_data["code"] == 40001, f"期望业务错误码 40001，实际: {error_data['code']}"
+        assert "SOURCE_DUP" in error_data["message"], f"错误消息应包含租户代码，实际: {error_data['message']}"
+        assert "已存在" in error_data["message"], f"错误消息应包含'已存在'，实际: {error_data['message']}"
+        assert "请更换后重试" in error_data["message"], f"错误消息应包含'请更换后重试'，实际: {error_data['message']}"
     
     @pytest.mark.asyncio
     async def test_clone_nonexistent_tenant(self):
-        """测试克隆不存在的租户应返回错误"""
+        """测试克隆不存在的租户应返回业务错误码 40002"""
         
         async with AsyncClient(app=app, base_url="http://test") as client:
             clone_response = await client.post(
@@ -248,8 +257,66 @@ class TestTenantCloningPerformance:
                 }
             )
         
-        assert clone_response.status_code == 404, f"期望返回404错误，实际: {clone_response.status_code}"
-        assert "不存在" in clone_response.json()["detail"]
+        assert clone_response.status_code == 200, f"期望返回200状态码（业务错误通过code字段区分），实际: {clone_response.status_code}"
+        
+        error_data = clone_response.json()
+        print(f"\n[错误响应验证] 不存在租户错误响应: {error_data}")
+        
+        assert "code" in error_data, "错误响应应包含 code 字段"
+        assert "message" in error_data, "错误响应应包含 message 字段"
+        assert error_data["code"] == 40002, f"期望业务错误码 40002，实际: {error_data['code']}"
+        assert "999999" in error_data["message"], f"错误消息应包含租户ID，实际: {error_data['message']}"
+        assert "不存在" in error_data["message"], f"错误消息应包含'不存在'，实际: {error_data['message']}"
+    
+    @pytest.mark.asyncio
+    async def test_clone_disabled_tenant(self):
+        """测试克隆已禁用的租户应返回业务错误码 40003"""
+        
+        async with AsyncClient(app=app, base_url="http://test") as client:
+            create_response = await client.post(
+                "/api/tenants/",
+                json={
+                    "name": "已禁用租户",
+                    "code": "DISABLED_TENANT",
+                }
+            )
+            
+            assert create_response.status_code in [200, 201]
+            source_tenant = create_response.json()
+            source_tenant_id = source_tenant["id"]
+            
+            update_response = await client.put(
+                f"/api/tenants/{source_tenant_id}",
+                json={
+                    "is_active": False
+                }
+            )
+            
+            assert update_response.status_code in [200, 201]
+            updated_tenant = update_response.json()
+            assert updated_tenant["is_active"] == False
+            
+            clone_response = await client.post(
+                f"/api/tenants/{source_tenant_id}/clone",
+                json={
+                    "name": "克隆租户",
+                    "code": "CLONED_DISABLED",
+                    "clone_roles": True,
+                    "clone_permissions": True,
+                    "clone_config": True
+                }
+            )
+        
+        assert clone_response.status_code == 200, f"期望返回200状态码（业务错误通过code字段区分），实际: {clone_response.status_code}"
+        
+        error_data = clone_response.json()
+        print(f"\n[错误响应验证] 已禁用租户错误响应: {error_data}")
+        
+        assert "code" in error_data, "错误响应应包含 code 字段"
+        assert "message" in error_data, "错误响应应包含 message 字段"
+        assert error_data["code"] == 40003, f"期望业务错误码 40003，实际: {error_data['code']}"
+        assert "已禁用租户" in error_data["message"], f"错误消息应包含租户名称，实际: {error_data['message']}"
+        assert "已被禁用" in error_data["message"], f"错误消息应包含'已被禁用'，实际: {error_data['message']}"
 
 
 if __name__ == "__main__":
