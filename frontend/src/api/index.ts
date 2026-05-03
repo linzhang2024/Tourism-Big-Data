@@ -19,7 +19,11 @@ import {
   QuotaUsage,
   User,
   RegisterRequest,
-  RejectRequest
+  RejectRequest,
+  AuditLog,
+  AuditLogPagedResponse,
+  OperationType,
+  OperationTypeOption
 } from '../types';
 import apiAxios from '../utils/axios';
 
@@ -363,4 +367,56 @@ export async function rejectUser(userId: number, reason?: string): Promise<void>
   console.log('[API] 调用 rejectUser:', userId, '原因:', reason);
   await apiAxios.post(`/auth/reject/${userId}`, { reason });
   console.log('[API] rejectUser 成功');
+}
+
+export interface GetAuditLogsParams {
+  page?: number;
+  page_size?: number;
+  operation_type?: OperationType;
+  operator_name?: string;
+  status?: 'success' | 'failed';
+  start_time?: string;
+  end_time?: string;
+}
+
+export async function getAuditLogs(params: GetAuditLogsParams = {}): Promise<AuditLogPagedResponse> {
+  console.log('[API] 调用 getAuditLogs，参数:', params);
+  
+  let queryParams: Record<string, any> = {};
+  
+  if (params.page) queryParams['page'] = params.page;
+  if (params.page_size) queryParams['page_size'] = params.page_size;
+  if (params.operation_type) queryParams['operation_type'] = params.operation_type;
+  if (params.operator_name) queryParams['operator_name'] = params.operator_name;
+  if (params.status) queryParams['status'] = params.status;
+  if (params.start_time) queryParams['start_time'] = params.start_time;
+  if (params.end_time) queryParams['end_time'] = params.end_time;
+
+  const response = await apiAxios.get<AuditLogPagedResponse>('/audit-logs/', {
+    params: queryParams
+  });
+  
+  console.log('[API] getAuditLogs 成功，总数:', response.data.total);
+  return response.data;
+}
+
+export async function getAuditLogById(logId: number): Promise<AuditLog> {
+  console.log('[API] 调用 getAuditLogById:', logId);
+  const response = await apiAxios.get<AuditLog>(`/audit-logs/${logId}`);
+  console.log('[API] getAuditLogById 成功');
+  return response.data;
+}
+
+export async function getOperationTypes(): Promise<OperationTypeOption[]> {
+  console.log('[API] 调用 getOperationTypes');
+  const response = await apiAxios.get<OperationTypeOption[]>('/audit-logs/operation-types');
+  console.log('[API] getOperationTypes 成功');
+  return response.data;
+}
+
+export async function getStatusOptions(): Promise<{ value: 'success' | 'failed'; label: string }[]> {
+  console.log('[API] 调用 getStatusOptions');
+  const response = await apiAxios.get<{ value: 'success' | 'failed'; label: string }[]>('/audit-logs/statuses');
+  console.log('[API] getStatusOptions 成功');
+  return response.data;
 }

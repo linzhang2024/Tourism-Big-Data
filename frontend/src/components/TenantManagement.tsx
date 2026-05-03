@@ -997,7 +997,7 @@ export const TenantManagement: React.FC = () => {
                 <table className="tenant-table">
                   <thead>
                     <tr style={{ width: '100%' }}>
-                      <th style={{ width: '50px', minWidth: '50px' }}>
+                      <th className="col-checkbox">
                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', justifyContent: 'center' }}>
                           <input
                             type="checkbox"
@@ -1017,13 +1017,13 @@ export const TenantManagement: React.FC = () => {
                           />
                         </label>
                       </th>
-                      <th style={{ width: '80px', minWidth: '80px' }}>ID</th>
-                      <th style={{ width: '20%', minWidth: '150px' }}>租户名称</th>
-                      <th style={{ width: '12%', minWidth: '100px' }}>代码</th>
-                      <th style={{ width: '30%', minWidth: '250px' }}>资源概览</th>
-                      <th style={{ width: '10%', minWidth: '80px' }}>状态</th>
-                      <th style={{ width: '15%', minWidth: '160px' }}>创建时间</th>
-                      <th style={{ width: '10%', minWidth: '100px' }}>操作</th>
+                      <th className="col-id ellipsis-cell">ID</th>
+                      <th className="col-name ellipsis-cell">租户名称</th>
+                      <th className="col-code ellipsis-cell">代码</th>
+                      <th className="col-resource">资源概览</th>
+                      <th className="col-status">状态</th>
+                      <th className="col-date ellipsis-cell">创建时间</th>
+                      <th className="col-action">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1062,7 +1062,7 @@ export const TenantManagement: React.FC = () => {
                               transition: 'all 0.3s ease-in-out'
                             }}
                           >
-                            <td>
+                            <td className="col-checkbox">
                               <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', justifyContent: 'center' }}>
                                 <input
                                   type="checkbox"
@@ -1077,7 +1077,7 @@ export const TenantManagement: React.FC = () => {
                                 />
                               </label>
                             </td>
-                            <td>
+                            <td className="col-id ellipsis-cell">
                               {tenant.id}
                               {isCurrentTenant(tenant) && (
                                 <span className="current-tenant-badge">
@@ -1085,7 +1085,7 @@ export const TenantManagement: React.FC = () => {
                                 </span>
                               )}
                             </td>
-                            <td className="tenant-name">
+                            <td className="col-name tenant-name">
                               {tenant.logo_url ? (
                                 <img 
                                   src={tenant.logo_url} 
@@ -1095,17 +1095,17 @@ export const TenantManagement: React.FC = () => {
                               ) : null}
                               {tenant.name}
                             </td>
-                            <td>
+                            <td className="col-code ellipsis-cell">
                               <span className="tenant-code">{tenant.code}</span>
                             </td>
-                            <td>
+                            <td className="col-resource">
                               <div className="resource-overview-cell">
                                 <div className="resource-item">
                                   <div className="resource-icon-wrapper">
                                     <CircularProgress 
                                       percentage={itineraryPercentage} 
-                                      size={56} 
-                                      strokeWidth={6} 
+                                      size={40} 
+                                      strokeWidth={4} 
                                       label={`${Math.round(itineraryPercentage)}%`}
                                     />
                                   </div>
@@ -1126,8 +1126,8 @@ export const TenantManagement: React.FC = () => {
                                   <div className="resource-icon-wrapper">
                                     <CircularProgress 
                                       percentage={aiPercentage} 
-                                      size={56} 
-                                      strokeWidth={6}
+                                      size={40} 
+                                      strokeWidth={4}
                                       label={`${Math.round(aiPercentage)}%`}
                                     />
                                   </div>
@@ -1146,7 +1146,7 @@ export const TenantManagement: React.FC = () => {
                                 </div>
                               </div>
                             </td>
-                            <td>
+                            <td className="col-status">
                               <span 
                                 style={{ 
                                   padding: '4px 12px', 
@@ -1166,8 +1166,8 @@ export const TenantManagement: React.FC = () => {
                                 {tenant.is_active ? '✓ 激活' : '✗ 停用'}
                               </span>
                             </td>
-                            <td className="date-cell" style={{ minWidth: '160px' }}>{formatDate(tenant.created_at)}</td>
-                            <td style={{ whiteSpace: 'nowrap' }}>
+                            <td className="col-date date-cell ellipsis-cell">{formatDate(tenant.created_at)}</td>
+                            <td className="col-action">
                               <div style={{ position: 'relative', zIndex: expandedMenuId === tenant.id ? 9999 : 10 }}>
                                 <button
                                   type="button"
