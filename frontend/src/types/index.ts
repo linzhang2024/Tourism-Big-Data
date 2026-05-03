@@ -251,3 +251,20 @@ export interface TenantUpdate {
   ai_calls_limit?: number;
   allowed_role_codes?: string[];
 }
+
+export interface TenantCloneRequest {
+  name: string;
+  code: string;
+  clone_roles: boolean;
+  clone_permissions: boolean;
+  clone_config: boolean;
+}
+
+export interface TenantCloneResponse {
+  id: number;
+  name: string;
+  code: string;
+  cloned_roles_count: number;
+  cloned_permissions_count: number;
+  message: string;
+}
